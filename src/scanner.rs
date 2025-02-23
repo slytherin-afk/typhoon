@@ -1,5 +1,5 @@
-mod token;
-mod token_type;
+pub mod token;
+pub mod token_type;
 
 use crate::Typhoon;
 use phf::phf_map;

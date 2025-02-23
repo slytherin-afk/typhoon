@@ -1,7 +1,7 @@
-mod scanner;
+pub mod expression;
+pub mod scanner;
 
-use rustyline::Editor;
-
+use rustyline::DefaultEditor;
 use scanner::Scanner;
 
 pub struct Typhoon {
@@ -16,27 +16,18 @@ impl Typhoon {
     pub fn run_file(&mut self) {}
 
     pub fn run_prompt(&mut self) {
-        let mut rl =
-            Editor::<(), rustyline::history::FileHistory>::new().expect("Failed to create editor");
+        let mut rl = DefaultEditor::new().expect("failed to create editor");
 
         loop {
-            let readline = rl.readline("> ");
+            let input = rl.readline("> ").expect("input is read correctly");
 
-            match readline {
-                Ok(line) => {
-                    let input = line.trim();
-
-                    if input == "exit()" {
-                        break;
-                    }
-
-                    self.run(input.to_string());
-                }
-                Err(_) => {
-                    println!("Error reading input");
-                    break;
-                }
+            if input == "exit()" {
+                break;
             }
+
+            rl.add_history_entry(&input)
+                .expect("input added to history");
+            self.run(input);
         }
     }
 
