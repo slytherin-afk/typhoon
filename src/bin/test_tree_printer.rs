@@ -32,7 +32,5 @@ fn main() {
         })),
     }));
 
-    let result = TreePrinter::print(&mut expression);
-
-    println!("{}", result);
+    println!("{}", TreePrinter::print(&mut expression));
 }
