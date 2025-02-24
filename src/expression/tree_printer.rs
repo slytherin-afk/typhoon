@@ -7,8 +7,7 @@ pub struct TreePrinter;
 
 impl TreePrinter {
     pub fn print(expression: &mut Expression) -> String {
-        let visitor = TreePrinter;
-        expression.accept(&visitor)
+        expression.accept(&TreePrinter)
     }
 
     fn parenthesize<T: ExpressionVisitor<String>>(
@@ -42,7 +41,11 @@ impl ExpressionVisitor<String> for TreePrinter {
     }
 
     fn visit_literal(&self, expr: &mut Literal) -> String {
-        expr.value.to_string()
+        if let Some(literal) = &expr.value.literal {
+            return literal.to_string();
+        }
+
+        return expr.value.lexeme.to_string();
     }
 
     fn visit_unary(&self, expr: &mut Unary) -> String {

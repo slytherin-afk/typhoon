@@ -3,7 +3,10 @@ use typhoon::{
         binary::Binary, grouping::Grouping, literal::Literal, tree_printer::TreePrinter,
         unary::Unary, Expression,
     },
-    scanner::{token::Token, token_type::TokenType},
+    scanner::{
+        token::{LiteralType, Token},
+        token_type::TokenType,
+    },
 };
 
 fn main() {
@@ -16,7 +19,12 @@ fn main() {
                 line: 1,
             },
             right: Expression::Literal(Box::new(Literal {
-                value: Box::new(123),
+                value: Token {
+                    token_type: TokenType::NumberLiteral,
+                    lexeme: "123".to_string(),
+                    literal: Some(LiteralType::Number(123.0)),
+                    line: 1,
+                },
             })),
         })),
         operator: Token {
@@ -27,7 +35,12 @@ fn main() {
         },
         right: Expression::Grouping(Box::new(Grouping {
             expression: Expression::Literal(Box::new(Literal {
-                value: Box::new(45.67),
+                value: Token {
+                    token_type: TokenType::NumberLiteral,
+                    lexeme: "45.67".to_string(),
+                    literal: Some(LiteralType::Number(45.67)),
+                    line: 1,
+                },
             })),
         })),
     }));

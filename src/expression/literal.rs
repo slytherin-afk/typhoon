@@ -1,3 +1,5 @@
+use crate::scanner::token::Token;
+
 pub struct Literal {
-    pub value: Box<dyn ToString>,
+    pub value: Token,
 }
