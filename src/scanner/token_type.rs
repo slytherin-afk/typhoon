@@ -11,6 +11,8 @@ pub enum TokenType {
     Minus,
     Plus,
     SemiColon,
+    Question,
+    Colon,
     Slash,
     Star,
     Bang,
@@ -39,5 +41,5 @@ pub enum TokenType {
     Let,
     None,
     Function,
-    Eof
+    Eof,
 }

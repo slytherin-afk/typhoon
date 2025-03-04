@@ -2,6 +2,7 @@ use super::{
     binary::Binary,
     grouping::Grouping,
     literal::{Literal, LiteralValue},
+    ternary::Ternary,
     unary::Unary,
     Expression, ExpressionVisitor,
 };
@@ -55,5 +56,13 @@ impl ExpressionVisitor<String> for TreePrinter {
 
     fn visit_unary(&self, expr: &mut Unary) -> String {
         Self::parenthesize(self, &expr.operator.lexeme, vec![&mut expr.right])
+    }
+
+    fn visit_ternary(&self, expr: &mut Ternary) -> String {
+        Self::parenthesize(
+            self,
+            "?:",
+            vec![&mut expr.condition, &mut expr.truth, &mut expr.falsy],
+        )
     }
 }

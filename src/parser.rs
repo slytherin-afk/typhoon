@@ -3,6 +3,7 @@ use crate::{
         binary::Binary,
         grouping::Grouping,
         literal::{Literal, LiteralValue},
+        ternary::Ternary,
         unary::Unary,
         Expression,
     },
@@ -48,7 +49,36 @@ impl<'a> Parser<'a> {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        return self.equality(counter, typhoon);
+        return self.ternary(counter, typhoon);
+    }
+
+    pub fn ternary(
+        &self,
+        counter: &mut Counter,
+        typhoon: &mut Typhoon,
+    ) -> Result<Expression, ParseError> {
+        let mut expression = self.equality(counter, typhoon)?;
+
+        while self.matches(vec![TokenType::Question], counter) {
+            let truth = self.ternary(counter, typhoon)?;
+
+            self.consume(
+                TokenType::Colon,
+                counter,
+                "Expected ':' a falsy value",
+                typhoon,
+            )?;
+
+            let falsy = self.ternary(counter, typhoon)?;
+
+            expression = Expression::Ternary(Box::new(Ternary {
+                condition: expression,
+                truth,
+                falsy,
+            }))
+        }
+
+        Ok(expression)
     }
 
     fn equality(
