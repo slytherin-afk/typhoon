@@ -24,20 +24,17 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "fn" => TokenType::Function,
 };
 
-#[warn(dead_code)]
 pub struct Scanner<'a> {
-    typhoon: &'a mut Typhoon,
-    source: String,
-    tokens: Vec<Token>,
+    source: &'a str,
+    tokens: Vec<Token<'a>>,
     current: usize,
     start: usize,
     line: usize,
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(typhoon: &'a mut Typhoon, source: String) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Self {
-            typhoon,
             source,
             tokens: vec![],
             current: 0,
@@ -46,17 +43,18 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> &Vec<Token> {
+    pub fn scan_tokens(mut self, typhoon: &mut Typhoon) -> Vec<Token<'a>> {
         while !self.is_at_end() {
             self.start = self.current;
 
-            self.scan_token();
+            self.scan_token(typhoon);
         }
 
-        &self.tokens
+        self.add_token(TokenType::Eof);
+        self.tokens
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&mut self, typhoon: &mut Typhoon) {
         let c = self.advance();
 
         if c == '(' {
@@ -108,22 +106,22 @@ impl<'a> Scanner<'a> {
             };
             self.add_token(token_type);
         } else if c == '/' {
-            self.slash()
+            self.slash(typhoon)
         } else if c == '\n' {
             self.line += 1;
         } else if c == '"' {
-            self.string_literal();
+            self.string_literal(typhoon);
         } else if c.is_digit(10) {
             self.number_literal();
         } else if Self::is_alphabetic(c) {
             self.identifier();
         } else if c == ' ' || c == '\r' || c == '\t' {
         } else {
-            self.typhoon.add_error(self.line, "Unexpected Token Error");
+            typhoon.error_one(self.line, "Unexpected Character Error");
         }
     }
 
-    fn slash(&mut self) {
+    fn slash(&mut self, typhoon: &mut Typhoon) {
         if self.peek() == '/' {
             loop {
                 self.advance();
@@ -137,7 +135,7 @@ impl<'a> Scanner<'a> {
                 self.advance();
 
                 if self.is_at_end() {
-                    self.typhoon.add_error(self.line, "Unexpected Token Error");
+                    typhoon.error_one(self.line, "Unexpected Character Error");
 
                     break;
                 }
@@ -154,7 +152,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn string_literal(&mut self) {
+    fn string_literal(&mut self, typhoon: &mut Typhoon) {
         loop {
             if self.peek() == '"' {
                 self.advance();
@@ -163,7 +161,7 @@ impl<'a> Scanner<'a> {
             }
 
             if self.is_at_end() {
-                self.typhoon.add_error(self.line, "Unexpected Token Error");
+                typhoon.error_one(self.line, "Unexpected Character Error");
 
                 break;
             }
@@ -171,7 +169,7 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
 
-        let literal = self.source[self.start + 1..self.current - 1].to_string();
+        let literal = &self.source[self.start + 1..self.current - 1];
 
         self.add_token_with_literal(TokenType::StringLiteral, Some(LiteralType::String(literal)));
     }
@@ -217,7 +215,7 @@ impl<'a> Scanner<'a> {
 
         let lexeme = &self.source[self.start..self.current];
         let token_type = if let Some(token_type) = KEYWORDS.get(lexeme) {
-            token_type.clone()
+            *token_type
         } else {
             TokenType::Identifier
         };
@@ -271,8 +269,8 @@ impl<'a> Scanner<'a> {
         self.add_token_with_literal(token_type, None);
     }
 
-    fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<LiteralType>) {
-        let lexeme = self.source[self.start..self.current].to_string();
+    fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<LiteralType<'a>>) {
+        let lexeme = &self.source[self.start..self.current];
         let token = Token::new(token_type, lexeme, literal, self.line);
         self.tokens.push(token);
     }

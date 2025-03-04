@@ -1,6 +1,6 @@
-use std::fmt;
+use serde::Serialize;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Serialize, PartialEq)]
 pub enum TokenType {
     LeftParenthesis,
     RightParenthesis,
@@ -39,10 +39,5 @@ pub enum TokenType {
     Let,
     None,
     Function,
-}
-
-impl fmt::Display for TokenType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
+    Eof
 }

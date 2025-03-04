@@ -1,35 +1,27 @@
-#![allow(dead_code)]
-
-use std::fmt;
+use serde::Serialize;
 
 use super::token_type::TokenType;
 
-pub enum LiteralType {
-    String(String),
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum LiteralType<'a> {
+    String(&'a str),
     Number(f64),
 }
 
-impl fmt::Display for LiteralType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LiteralType::String(s) => write!(f, "{s}",),
-            LiteralType::Number(u) => write!(f, "{u}",),
-        }
-    }
-}
-
-pub struct Token {
+#[derive(Serialize)]
+pub struct Token<'a> {
     pub token_type: TokenType,
-    pub lexeme: String,
-    pub literal: Option<LiteralType>,
+    pub lexeme: &'a str,
+    pub literal: Option<LiteralType<'a>>,
     pub line: usize,
 }
 
-impl Token {
+impl<'a> Token<'a> {
     pub fn new(
         token_type: TokenType,
-        lexeme: String,
-        literal: Option<LiteralType>,
+        lexeme: &'a str,
+        literal: Option<LiteralType<'a>>,
         line: usize,
     ) -> Self {
         Self {
@@ -38,11 +30,5 @@ impl Token {
             literal,
             line,
         }
-    }
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{0}>{1}<{0}>", self.token_type, self.lexeme)
     }
 }

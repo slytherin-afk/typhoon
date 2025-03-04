@@ -9,11 +9,11 @@ use grouping::Grouping;
 use literal::Literal;
 use unary::Unary;
 
-pub enum Expression {
-    Binary(Box<Binary>),
-    Grouping(Box<Grouping>),
-    Literal(Box<Literal>),
-    Unary(Box<Unary>),
+pub enum Expression<'a> {
+    Binary(Box<Binary<'a>>),
+    Grouping(Box<Grouping<'a>>),
+    Literal(Box<Literal<'a>>),
+    Unary(Box<Unary<'a>>),
 }
 
 pub trait ExpressionVisitor<T> {
@@ -23,7 +23,7 @@ pub trait ExpressionVisitor<T> {
     fn visit_unary(&self, expr: &mut Unary) -> T;
 }
 
-impl Expression {
+impl<'a> Expression<'a> {
     pub fn accept<T, V: ExpressionVisitor<T>>(&mut self, visitor: &V) -> T {
         match self {
             Expression::Binary(binary) => visitor.visit_binary(binary),

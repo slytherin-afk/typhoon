@@ -1,6 +1,9 @@
 use super::{
-    binary::Binary, grouping::Grouping, literal::Literal, unary::Unary, Expression,
-    ExpressionVisitor,
+    binary::Binary,
+    grouping::Grouping,
+    literal::{Literal, LiteralValue},
+    unary::Unary,
+    Expression, ExpressionVisitor,
 };
 
 pub struct TreePrinter;
@@ -41,11 +44,13 @@ impl ExpressionVisitor<String> for TreePrinter {
     }
 
     fn visit_literal(&self, expr: &mut Literal) -> String {
-        if let Some(literal) = &expr.value.literal {
-            return literal.to_string();
+        match expr.value {
+            LiteralValue::True => "True".to_string(),
+            LiteralValue::False => "String".to_string(),
+            LiteralValue::Number(number) => number.to_string(),
+            LiteralValue::String(value) => value.to_string(),
+            LiteralValue::None => "None".to_string(),
         }
-
-        return expr.value.lexeme.to_string();
     }
 
     fn visit_unary(&self, expr: &mut Unary) -> String {

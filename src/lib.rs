@@ -1,8 +1,11 @@
 pub mod expression;
+pub mod parser;
 pub mod scanner;
 
+use expression::tree_printer::TreePrinter;
+use parser::{Counter, Parser};
 use rustyline::DefaultEditor;
-use scanner::Scanner;
+use scanner::{token::Token, token_type::TokenType, Scanner};
 
 pub struct Typhoon {
     have_error: bool,
@@ -13,7 +16,9 @@ impl Typhoon {
         Self { have_error: false }
     }
 
-    pub fn run_file(&mut self) {}
+    pub fn run_file(&mut self) {
+        todo!()
+    }
 
     pub fn run_prompt(&mut self) {
         let mut rl = DefaultEditor::new().expect("failed to create editor");
@@ -28,24 +33,38 @@ impl Typhoon {
             rl.add_history_entry(&input)
                 .expect("input added to history");
             self.run(input);
+            self.have_error = false;
         }
     }
 
     fn run(&mut self, source: String) {
-        let mut scanner = Scanner::new(self, source);
-        let tokens = scanner.scan_tokens();
+        let scanner = Scanner::new(&source);
+        let tokens = scanner.scan_tokens(self);
+        let parser = Parser::new(tokens);
+        let mut counter = Counter::new();
+        let mut expression = parser
+            .parse(&mut counter, self)
+            .expect("a valid expression");
+        let expression_string = TreePrinter::print(&mut expression);
 
-        for token in tokens {
-            println!("{}", token)
+        println!("{}", expression_string);
+    }
+
+    pub fn error_one(&mut self, line: usize, message: &str) {
+        self.report(line, "", message);
+    }
+
+    pub fn error_two<'a>(&mut self, token: &'a Token, message: &str) {
+        if token.token_type == TokenType::Eof {
+            self.report(token.line, "at end", message);
+        } else {
+            let wheres = format!("at '{}'", token.lexeme);
+            self.report(token.line, &wheres, message);
         }
     }
 
-    pub fn add_error(&mut self, line: usize, message: &str) {
+    fn report(&mut self, line: usize, wheres: &str, message: &str) {
+        println!("[{line}] Error {wheres}: {message}");
         self.have_error = true;
-        self.report_error(line, message);
-    }
-
-    fn report_error(&mut self, line: usize, message: &str) {
-        println!("{line} {message}");
     }
 }
