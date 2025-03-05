@@ -29,7 +29,7 @@ pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ParseError;
 
 impl<'a> Parser<'a> {
@@ -254,6 +254,29 @@ impl<'a> Parser<'a> {
             return Ok(Expression::Grouping(Box::new(Grouping { expression })));
         }
 
+        if self.matches(
+            vec![
+                TokenType::EqualEqual,
+                TokenType::BangEqual,
+                TokenType::LessEqual,
+                TokenType::Less,
+                TokenType::GreaterEqual,
+                TokenType::Greater,
+                TokenType::Minus,
+                TokenType::Plus,
+                TokenType::Star,
+                TokenType::Slash,
+            ],
+            counter,
+        ) {
+            Self::error(
+                self.peek(counter),
+                "Unexpected without left operand",
+                typhoon,
+            );
+            return self.expression(counter, typhoon);
+        }
+
         Err(Self::error(
             self.peek(counter),
             "Expect an expression",
@@ -315,13 +338,13 @@ impl<'a> Parser<'a> {
         &self.tokens[counter.current - 1]
     }
 
-    fn error(token: &Token, message: &str, typhoon: &mut Typhoon) -> ParseError {
+    fn error<'b>(token: &'b Token, message: &str, typhoon: &mut Typhoon) -> ParseError {
         typhoon.error_two(token, message);
 
         ParseError
     }
 
-    fn _synchronize(&self, counter: &mut Counter) {
+    fn synchronize(&self, counter: &mut Counter) {
         self.advance(counter);
 
         while !self.is_at_end(counter) {
