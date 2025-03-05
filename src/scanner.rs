@@ -66,7 +66,7 @@ impl<'a> Scanner<'a> {
         } else if c == '}' {
             self.add_token(TokenType::RightBraces);
         } else if c == ',' {
-            self.add_token(TokenType::Coma);
+            self.add_token(TokenType::Comma);
         } else if c == '.' {
             self.add_token(TokenType::Dot);
         } else if c == '-' {

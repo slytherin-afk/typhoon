@@ -1,15 +1,10 @@
-use serde::Serialize;
-
 use super::token_type::TokenType;
 
-#[derive(Serialize)]
-#[serde(untagged)]
 pub enum LiteralType<'a> {
     String(&'a str),
     Number(f64),
 }
 
-#[derive(Serialize)]
 pub struct Token<'a> {
     pub token_type: TokenType,
     pub lexeme: &'a str,

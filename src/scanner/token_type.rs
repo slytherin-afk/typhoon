@@ -1,12 +1,10 @@
-use serde::Serialize;
-
-#[derive(Clone, Copy, Serialize, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum TokenType {
     LeftParenthesis,
     RightParenthesis,
     LeftBraces,
     RightBraces,
-    Coma,
+    Comma,
     Dot,
     Minus,
     Plus,

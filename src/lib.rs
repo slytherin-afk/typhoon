@@ -2,7 +2,7 @@ pub mod expression;
 pub mod parser;
 pub mod scanner;
 
-use expression::tree_printer::TreePrinter;
+use expression::pretty_tree_printer::PrettyTreePrinter;
 use parser::{Counter, Parser};
 use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
@@ -45,7 +45,7 @@ impl Typhoon {
         let mut expression = parser
             .parse(&mut counter, self)
             .expect("a valid expression");
-        let expression_string = TreePrinter::print(&mut expression);
+        let expression_string = PrettyTreePrinter::print(&mut expression);
 
         println!("{}", expression_string);
     }

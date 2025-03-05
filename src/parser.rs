@@ -1,6 +1,7 @@
 use crate::{
     expression::{
         binary::Binary,
+        comma::Comma,
         grouping::Grouping,
         literal::{Literal, LiteralValue},
         ternary::Ternary,
@@ -49,7 +50,26 @@ impl<'a> Parser<'a> {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        return self.ternary(counter, typhoon);
+        return self.comma(counter, typhoon);
+    }
+
+    fn comma(
+        &self,
+        counter: &mut Counter,
+        typhoon: &mut Typhoon,
+    ) -> Result<Expression, ParseError> {
+        let mut expression = self.ternary(counter, typhoon)?;
+
+        while self.matches(vec![TokenType::Comma], counter) {
+            let right = self.ternary(counter, typhoon)?;
+
+            expression = Expression::Comma(Box::new(Comma {
+                left: expression,
+                right,
+            }))
+        }
+
+        Ok(expression)
     }
 
     pub fn ternary(
@@ -59,8 +79,8 @@ impl<'a> Parser<'a> {
     ) -> Result<Expression, ParseError> {
         let mut expression = self.equality(counter, typhoon)?;
 
-        while self.matches(vec![TokenType::Question], counter) {
-            let truth = self.ternary(counter, typhoon)?;
+        if self.matches(vec![TokenType::Question], counter) {
+            let truth = self.expression(counter, typhoon)?;
 
             self.consume(
                 TokenType::Colon,
@@ -69,8 +89,7 @@ impl<'a> Parser<'a> {
                 typhoon,
             )?;
 
-            let falsy = self.ternary(counter, typhoon)?;
-
+            let falsy = self.expression(counter, typhoon)?;
             expression = Expression::Ternary(Box::new(Ternary {
                 condition: expression,
                 truth,
@@ -302,7 +321,7 @@ impl<'a> Parser<'a> {
         ParseError
     }
 
-    fn synchronize(&self, counter: &mut Counter) {
+    fn _synchronize(&self, counter: &mut Counter) {
         self.advance(counter);
 
         while !self.is_at_end(counter) {

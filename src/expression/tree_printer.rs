@@ -1,5 +1,6 @@
 use super::{
     binary::Binary,
+    comma::Comma,
     grouping::Grouping,
     literal::{Literal, LiteralValue},
     ternary::Ternary,
@@ -17,13 +18,13 @@ impl TreePrinter {
     fn parenthesize<T: ExpressionVisitor<String>>(
         visitor: &T,
         name: &str,
-        expressions: Vec<&mut Expression>,
+        expressions: &mut Vec<&mut Expression>,
     ) -> String {
         let mut builder = format!("({name}");
 
-        expressions.into_iter().for_each(|ex| {
-            builder += " ";
-            builder += &ex.accept(visitor);
+        expressions.iter_mut().for_each(|ex| {
+            let expression = ex.accept(visitor);
+            builder = format!("{builder} {expression}");
         });
 
         builder.push(')');
@@ -32,16 +33,34 @@ impl TreePrinter {
 }
 
 impl ExpressionVisitor<String> for TreePrinter {
+    fn visit_comma(&self, expr: &mut Comma) -> String {
+        let mut expressions = vec![&mut expr.left, &mut expr.right];
+
+        Self::parenthesize(self, ",", &mut expressions)
+    }
+
+    fn visit_ternary(&self, expr: &mut Ternary) -> String {
+        let mut expressions = vec![&mut expr.condition, &mut expr.truth, &mut expr.falsy];
+
+        Self::parenthesize(self, "?:", &mut expressions)
+    }
+
     fn visit_binary(&self, expr: &mut Binary) -> String {
-        Self::parenthesize(
-            self,
-            &expr.operator.lexeme,
-            vec![&mut expr.left, &mut expr.right],
-        )
+        let mut expressions = vec![&mut expr.left, &mut expr.right];
+
+        Self::parenthesize(self, &expr.operator.lexeme, &mut expressions)
+    }
+
+    fn visit_unary(&self, expr: &mut Unary) -> String {
+        let mut expressions = vec![&mut expr.right];
+
+        Self::parenthesize(self, &expr.operator.lexeme, &mut expressions)
     }
 
     fn visit_grouping(&self, expr: &mut Grouping) -> String {
-        Self::parenthesize(self, "group", vec![&mut expr.expression])
+        let mut expressions = vec![&mut expr.expression];
+
+        Self::parenthesize(self, "group", &mut expressions)
     }
 
     fn visit_literal(&self, expr: &mut Literal) -> String {
@@ -52,17 +71,5 @@ impl ExpressionVisitor<String> for TreePrinter {
             LiteralValue::String(value) => value.to_string(),
             LiteralValue::None => "None".to_string(),
         }
-    }
-
-    fn visit_unary(&self, expr: &mut Unary) -> String {
-        Self::parenthesize(self, &expr.operator.lexeme, vec![&mut expr.right])
-    }
-
-    fn visit_ternary(&self, expr: &mut Ternary) -> String {
-        Self::parenthesize(
-            self,
-            "?:",
-            vec![&mut expr.condition, &mut expr.truth, &mut expr.falsy],
-        )
     }
 }
