@@ -210,7 +210,7 @@ impl<'a> Parser<'a> {
 
             if let LiteralType::Number(value) = number {
                 return Ok(Expression::Literal(Box::new(Literal {
-                    value: LiteralValue::Number(value),
+                    value: LiteralValue::Number(*value),
                 })));
             }
         }
@@ -220,20 +220,20 @@ impl<'a> Parser<'a> {
 
             if let LiteralType::String(value) = string {
                 return Ok(Expression::Literal(Box::new(Literal {
-                    value: LiteralValue::String(value),
+                    value: LiteralValue::String(value.to_string()),
                 })));
             }
         }
 
         if self.matches(vec![TokenType::False], counter) {
             return Ok(Expression::Literal(Box::new(Literal {
-                value: LiteralValue::False,
+                value: LiteralValue::Boolean(false),
             })));
         }
 
         if self.matches(vec![TokenType::True], counter) {
             return Ok(Expression::Literal(Box::new(Literal {
-                value: LiteralValue::True,
+                value: LiteralValue::Boolean(true),
             })));
         }
 

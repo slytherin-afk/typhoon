@@ -1,11 +1,26 @@
-pub enum LiteralValue<'a> {
-    True,
-    False,
+use std::fmt;
+
+#[derive(Clone, PartialEq)]
+pub enum LiteralValue {
     None,
-    Number(&'a f64),
-    String(&'a str),
+    Number(f64),
+    String(String),
+    Boolean(bool),
 }
 
-pub struct Literal<'a> {
-    pub value: LiteralValue<'a>,
+impl fmt::Display for LiteralValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            LiteralValue::None => "None",
+            LiteralValue::Number(n) => &n.to_string(),
+            LiteralValue::String(s) => &s.to_string(),
+            LiteralValue::Boolean(b) => &b.to_string(),
+        };
+
+        write!(f, "{value}")
+    }
+}
+
+pub struct Literal {
+    pub value: LiteralValue,
 }

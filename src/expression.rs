@@ -2,10 +2,10 @@ pub mod binary;
 pub mod comma;
 pub mod grouping;
 pub mod literal;
-pub mod pretty_tree_printer;
 pub mod ternary;
-pub mod tree_printer;
 pub mod unary;
+pub mod visitor_ast_printer;
+pub mod visitor_interpreter;
 
 use binary::Binary;
 use comma::Comma;
@@ -20,20 +20,22 @@ pub enum Expression<'a> {
     Binary(Box<Binary<'a>>),
     Unary(Box<Unary<'a>>),
     Grouping(Box<Grouping<'a>>),
-    Literal(Box<Literal<'a>>),
+    Literal(Box<Literal>),
 }
 
-pub trait ExpressionVisitor<T> {
-    fn visit_comma(&self, expr: &mut Comma) -> T;
-    fn visit_ternary(&self, expr: &mut Ternary) -> T;
-    fn visit_binary(&self, expr: &mut Binary) -> T;
-    fn visit_unary(&self, expr: &mut Unary) -> T;
-    fn visit_grouping(&self, expr: &mut Grouping) -> T;
-    fn visit_literal(&self, expr: &mut Literal) -> T;
+trait ExpressionVisitor {
+    type Item;
+
+    fn visit_comma(&self, expr: &mut Comma) -> Self::Item;
+    fn visit_ternary(&self, expr: &mut Ternary) -> Self::Item;
+    fn visit_binary(&self, expr: &mut Binary) -> Self::Item;
+    fn visit_unary(&self, expr: &mut Unary) -> Self::Item;
+    fn visit_grouping(&self, expr: &mut Grouping) -> Self::Item;
+    fn visit_literal(&self, expr: &mut Literal) -> Self::Item;
 }
 
 impl<'a> Expression<'a> {
-    pub fn accept<T, V: ExpressionVisitor<T>>(&mut self, visitor: &V) -> T {
+    fn accept<V: ExpressionVisitor>(&mut self, visitor: &V) -> V::Item {
         match self {
             Expression::Comma(comma) => visitor.visit_comma(comma),
             Expression::Ternary(ternary) => visitor.visit_ternary(ternary),
