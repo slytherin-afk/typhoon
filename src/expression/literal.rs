@@ -11,7 +11,7 @@ pub enum LiteralValue {
 impl fmt::Display for LiteralValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
-            LiteralValue::None => "None",
+            LiteralValue::None => "none",
             LiteralValue::Number(n) => &n.to_string(),
             LiteralValue::String(s) => &s.to_string(),
             LiteralValue::Boolean(b) => &b.to_string(),
