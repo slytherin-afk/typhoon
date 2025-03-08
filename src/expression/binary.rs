@@ -4,6 +4,6 @@ use super::Expression;
 
 pub struct Binary<'a> {
     pub left: Expression<'a>,
-    pub operator: &'a Token<'a>,
+    pub operator: &'a Token,
     pub right: Expression<'a>,
 }

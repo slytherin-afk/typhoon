@@ -20,7 +20,6 @@ fn main() {
     let mut compiler = Typhoon::new();
 
     if filenames.is_empty() {
-        println!("Welcome to Typhoon");
         compiler.run_prompt();
     } else {
         println!("Filenames: {:?}", filenames);

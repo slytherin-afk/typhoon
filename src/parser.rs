@@ -25,15 +25,15 @@ impl Counter {
     }
 }
 
-pub struct Parser<'a> {
-    tokens: Vec<Token<'a>>,
+pub struct Parser {
+    tokens: Vec<Token>,
 }
 
 #[derive(Debug)]
 pub struct ParseError;
 
-impl<'a> Parser<'a> {
-    pub fn new(tokens: Vec<Token<'a>>) -> Self {
+impl Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens }
     }
 

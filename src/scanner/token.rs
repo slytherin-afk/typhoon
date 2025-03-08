@@ -1,22 +1,24 @@
 use super::token_type::TokenType;
 
-pub enum LiteralType<'a> {
-    String(&'a str),
+#[derive(Clone)]
+pub enum LiteralType {
+    String(String),
     Number(f64),
 }
 
-pub struct Token<'a> {
+#[derive(Clone)]
+pub struct Token {
     pub token_type: TokenType,
-    pub lexeme: &'a str,
-    pub literal: Option<LiteralType<'a>>,
+    pub lexeme: String,
+    pub literal: Option<LiteralType>,
     pub line: usize,
 }
 
-impl<'a> Token<'a> {
+impl Token {
     pub fn new(
         token_type: TokenType,
-        lexeme: &'a str,
-        literal: Option<LiteralType<'a>>,
+        lexeme: String,
+        literal: Option<LiteralType>,
         line: usize,
     ) -> Self {
         Self {

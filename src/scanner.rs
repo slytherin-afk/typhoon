@@ -24,16 +24,16 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "fn" => TokenType::Function,
 };
 
-pub struct Scanner<'a> {
-    source: &'a str,
-    tokens: Vec<Token<'a>>,
+pub struct Scanner {
+    source: String,
+    tokens: Vec<Token>,
     current: usize,
     start: usize,
     line: usize,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl Scanner {
+    pub fn new(source: String) -> Self {
         Self {
             source,
             tokens: vec![],
@@ -43,7 +43,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_tokens(mut self, typhoon: &mut Typhoon) -> Vec<Token<'a>> {
+    pub fn scan_tokens(mut self, typhoon: &mut Typhoon) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
 
@@ -175,7 +175,10 @@ impl<'a> Scanner<'a> {
 
         let literal = &self.source[self.start + 1..self.current - 1];
 
-        self.add_token_with_literal(TokenType::StringLiteral, Some(LiteralType::String(literal)));
+        self.add_token_with_literal(
+            TokenType::StringLiteral,
+            Some(LiteralType::String(literal.to_string())),
+        );
     }
 
     fn number_literal(&mut self) {
@@ -273,8 +276,8 @@ impl<'a> Scanner<'a> {
         self.add_token_with_literal(token_type, None);
     }
 
-    fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<LiteralType<'a>>) {
-        let lexeme = &self.source[self.start..self.current];
+    fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<LiteralType>) {
+        let lexeme = self.source[self.start..self.current].to_string();
         let token = Token::new(token_type, lexeme, literal, self.line);
         self.tokens.push(token);
     }
