@@ -19,9 +19,10 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "return" => TokenType::Return,
     "super" => TokenType::Super,
     "this" => TokenType::This,
-    "let" => TokenType::Let,
-    "none" => TokenType::None,
-    "fn" => TokenType::Function,
+    "var" => TokenType::Var,
+    "undefined" => TokenType::Undefined,
+    "function" => TokenType::Function,
+    "print" => TokenType::Print,
 };
 
 pub struct Scanner {

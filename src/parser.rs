@@ -1,16 +1,16 @@
 use crate::{
     expression::{
-        binary::Binary,
-        comma::Comma,
-        grouping::Grouping,
-        literal::{Literal, LiteralValue},
-        ternary::Ternary,
-        unary::Unary,
-        Expression,
+        assignment::Assignment, binary::Binary, comma::Comma, grouping::Grouping, literal::Literal,
+        ternary::Ternary, unary::Unary, variable::Variable, Expression,
     },
+    object::Object,
     scanner::{
         token::{LiteralType, Token},
         token_type::TokenType,
+    },
+    stmt::{
+        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, print_stmt::PrintStmt,
+        variable_stmt::VariableStmt, Stmt,
     },
     Typhoon,
 };
@@ -41,8 +41,14 @@ impl Parser {
         &self,
         counter: &mut Counter,
         typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        return self.expression(counter, typhoon);
+    ) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements = vec![];
+
+        while !self.is_at_end(counter) {
+            statements.push(self.declaration_stmt(counter, typhoon)?);
+        }
+
+        Ok(statements)
     }
 
     fn expression(
@@ -50,7 +56,145 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        return self.comma(counter, typhoon);
+        return self.assignment(counter, typhoon);
+    }
+
+    fn declaration_stmt(
+        &self,
+        counter: &mut Counter,
+        typhoon: &mut Typhoon,
+    ) -> Result<Stmt, ParseError> {
+        let stmt = if self.matches(vec![TokenType::Var], counter) {
+            self.variable_stmt(counter, typhoon)
+        } else {
+            self.stmt(counter, typhoon)
+        };
+
+        if let Err(_) = stmt {
+            self.synchronize(counter);
+        }
+
+        stmt
+    }
+
+    fn stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        if self.matches(vec![TokenType::Print], counter) {
+            self.print_stmt(counter, typhoon)
+        } else if self.matches(vec![TokenType::LeftBraces], counter) {
+            Ok(Stmt::BlockStmt(Box::new(BlockStmt {
+                stmts: self.block_stmt(counter, typhoon)?,
+            })))
+        } else {
+            self.expr_stmt(counter, typhoon)
+        }
+    }
+
+    fn print_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        let expression = self.expression(counter, typhoon)?;
+
+        self.consume(
+            TokenType::SemiColon,
+            counter,
+            "Expected ';' at the end of print expression",
+            typhoon,
+        )?;
+
+        Ok(Stmt::PrintStmt(Box::new(PrintStmt { expression })))
+    }
+
+    fn variable_stmt(
+        &self,
+        counter: &mut Counter,
+        typhoon: &mut Typhoon,
+    ) -> Result<Stmt, ParseError> {
+        let name = self.consume(
+            TokenType::Identifier,
+            counter,
+            "Expected an identifier",
+            typhoon,
+        )?;
+
+        let initializer = if self.matches(vec![TokenType::Equal], counter) {
+            Some(self.expression(counter, typhoon)?)
+        } else {
+            None
+        };
+
+        self.consume(
+            TokenType::SemiColon,
+            counter,
+            "Expected ';' at the end of variable declaration",
+            typhoon,
+        )?;
+
+        Ok(Stmt::VariableStmt(Box::new(VariableStmt {
+            name,
+            initializer,
+        })))
+    }
+
+    fn expr_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        let expression = self.expression(counter, typhoon)?;
+
+        self.consume(
+            TokenType::SemiColon,
+            counter,
+            "Expect ';' at the end of expression statement",
+            typhoon,
+        )?;
+
+        Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt {
+            expression,
+        })))
+    }
+
+    fn block_stmt(
+        &self,
+        counter: &mut Counter,
+        typhoon: &mut Typhoon,
+    ) -> Result<Vec<Stmt>, ParseError> {
+        let mut stmts = vec![];
+
+        while !self.check(TokenType::RightBraces, counter) && !self.is_at_end(counter) {
+            stmts.push(self.declaration_stmt(counter, typhoon)?);
+        }
+
+        self.consume(
+            TokenType::RightBraces,
+            counter,
+            "Expect '}' after block",
+            typhoon,
+        )?;
+
+        Ok(stmts)
+    }
+
+    fn assignment(
+        &self,
+        counter: &mut Counter,
+        typhoon: &mut Typhoon,
+    ) -> Result<Expression, ParseError> {
+        let left = self.comma(counter, typhoon)?;
+
+        if self.matches(vec![TokenType::Equal], counter) {
+            match &left {
+                Expression::Variable(variable) => {
+                    let right = self.assignment(counter, typhoon)?;
+
+                    Ok(Expression::Assignment(Box::new(Assignment {
+                        name: variable.name,
+                        expression: right,
+                    })))
+                }
+                _ => Err(Self::error(
+                    self.previous(counter),
+                    "Invalid assignment target",
+                    typhoon,
+                )),
+            }
+        } else {
+            Ok(left)
+        }
     }
 
     fn comma(
@@ -58,18 +202,15 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        let mut expression = self.ternary(counter, typhoon)?;
+        let mut left = self.ternary(counter, typhoon)?;
 
         while self.matches(vec![TokenType::Comma], counter) {
             let right = self.ternary(counter, typhoon)?;
 
-            expression = Expression::Comma(Box::new(Comma {
-                left: expression,
-                right,
-            }))
+            left = Expression::Comma(Box::new(Comma { left, right }))
         }
 
-        Ok(expression)
+        Ok(left)
     }
 
     pub fn ternary(
@@ -77,7 +218,7 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        let mut expression = self.equality(counter, typhoon)?;
+        let mut condition = self.equality(counter, typhoon)?;
 
         if self.matches(vec![TokenType::Question], counter) {
             let truth = self.expression(counter, typhoon)?;
@@ -90,14 +231,15 @@ impl Parser {
             )?;
 
             let falsy = self.expression(counter, typhoon)?;
-            expression = Expression::Ternary(Box::new(Ternary {
-                condition: expression,
+
+            condition = Expression::Ternary(Box::new(Ternary {
+                condition,
                 truth,
                 falsy,
             }))
         }
 
-        Ok(expression)
+        Ok(condition)
     }
 
     fn equality(
@@ -105,19 +247,19 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        let mut expression = self.comparison(counter, typhoon)?;
+        let mut left = self.comparison(counter, typhoon)?;
 
         while self.matches(vec![TokenType::BangEqual, TokenType::EqualEqual], counter) {
             let operator = self.previous(counter);
             let right = self.comparison(counter, typhoon)?;
-            expression = Expression::Binary(Box::new(Binary {
-                left: expression,
+            left = Expression::Binary(Box::new(Binary {
+                left,
                 operator,
                 right,
             }))
         }
 
-        Ok(expression)
+        Ok(left)
     }
 
     fn comparison(
@@ -125,7 +267,7 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        let mut expression = self.term(counter, typhoon)?;
+        let mut left = self.term(counter, typhoon)?;
 
         while self.matches(
             vec![
@@ -137,31 +279,31 @@ impl Parser {
             counter,
         ) {
             let operator = self.previous(counter);
-            let right = self.term(counter, typhoon)?;
-            expression = Expression::Binary(Box::new(Binary {
-                left: expression,
+            let right: Expression<'_> = self.term(counter, typhoon)?;
+            left = Expression::Binary(Box::new(Binary {
+                left,
                 operator,
                 right,
             }))
         }
 
-        Ok(expression)
+        Ok(left)
     }
 
     fn term(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Expression, ParseError> {
-        let mut expression = self.factor(counter, typhoon)?;
+        let mut left = self.factor(counter, typhoon)?;
 
         while self.matches(vec![TokenType::Minus, TokenType::Plus], counter) {
             let operator = self.previous(counter);
             let right = self.factor(counter, typhoon)?;
-            expression = Expression::Binary(Box::new(Binary {
-                left: expression,
+            left = Expression::Binary(Box::new(Binary {
+                left,
                 operator,
                 right,
             }))
         }
 
-        Ok(expression)
+        Ok(left)
     }
 
     fn factor(
@@ -169,19 +311,19 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Expression, ParseError> {
-        let mut expression = self.unary(counter, typhoon)?;
+        let mut left = self.unary(counter, typhoon)?;
 
         while self.matches(vec![TokenType::Star, TokenType::Slash], counter) {
             let operator = self.previous(counter);
             let right = self.unary(counter, typhoon)?;
-            expression = Expression::Binary(Box::new(Binary {
-                left: expression,
+            left = Expression::Binary(Box::new(Binary {
+                left,
                 operator,
                 right,
             }))
         }
 
-        Ok(expression)
+        Ok(left)
     }
 
     fn unary(
@@ -194,10 +336,10 @@ impl Parser {
             let right = self.unary(counter, typhoon)?;
             let expression = Expression::Unary(Box::new(Unary { operator, right }));
 
-            return Ok(expression);
+            Ok(expression)
+        } else {
+            self.primary(counter, typhoon)
         }
-
-        self.primary(counter, typhoon)
     }
 
     fn primary(
@@ -210,7 +352,7 @@ impl Parser {
 
             if let LiteralType::Number(value) = number {
                 return Ok(Expression::Literal(Box::new(Literal {
-                    value: LiteralValue::Number(*value),
+                    value: Object::Number(*value),
                 })));
             }
         }
@@ -220,37 +362,45 @@ impl Parser {
 
             if let LiteralType::String(value) = string {
                 return Ok(Expression::Literal(Box::new(Literal {
-                    value: LiteralValue::String(value.to_string()),
+                    value: Object::String(value.to_string()),
                 })));
             }
         }
 
         if self.matches(vec![TokenType::False], counter) {
             return Ok(Expression::Literal(Box::new(Literal {
-                value: LiteralValue::Boolean(false),
+                value: Object::Boolean(false),
             })));
         }
 
         if self.matches(vec![TokenType::True], counter) {
             return Ok(Expression::Literal(Box::new(Literal {
-                value: LiteralValue::Boolean(true),
+                value: Object::Boolean(true),
             })));
         }
 
-        if self.matches(vec![TokenType::None], counter) {
+        if self.matches(vec![TokenType::Undefined], counter) {
             return Ok(Expression::Literal(Box::new(Literal {
-                value: LiteralValue::None,
+                value: Object::Undefined,
+            })));
+        }
+
+        if self.matches(vec![TokenType::Identifier], counter) {
+            return Ok(Expression::Variable(Box::new(Variable {
+                name: self.previous(counter),
             })));
         }
 
         if self.matches(vec![TokenType::LeftParenthesis], counter) {
             let expression = self.expression(counter, typhoon)?;
+
             self.consume(
                 TokenType::RightParenthesis,
                 counter,
                 "Expect ')' after expression",
                 typhoon,
             )?;
+
             return Ok(Expression::Grouping(Box::new(Grouping { expression })));
         }
 
@@ -262,7 +412,6 @@ impl Parser {
                 TokenType::Less,
                 TokenType::GreaterEqual,
                 TokenType::Greater,
-                TokenType::Minus,
                 TokenType::Plus,
                 TokenType::Star,
                 TokenType::Slash,
@@ -274,6 +423,7 @@ impl Parser {
                 "Unexpected without left operand",
                 typhoon,
             );
+
             return self.expression(counter, typhoon);
         }
 
@@ -327,7 +477,7 @@ impl Parser {
     }
 
     fn is_at_end(&self, counter: &mut Counter) -> bool {
-        counter.current >= self.tokens.len()
+        self.peek(counter).token_type == TokenType::Eof
     }
 
     fn peek(&self, counter: &mut Counter) -> &Token {
@@ -353,7 +503,7 @@ impl Parser {
                 | TokenType::If
                 | TokenType::While
                 | TokenType::For
-                | TokenType::Let
+                | TokenType::Var
                 | TokenType::Function
                 | TokenType::Return => return,
                 TokenType::SemiColon => {

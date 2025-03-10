@@ -1,11 +1,18 @@
+pub mod environment;
 pub mod expression;
+pub mod object;
 pub mod parser;
 pub mod scanner;
+pub mod stmt;
+pub mod visitor;
 
-use expression::visitor_interpreter::{Interpreter, RuntimeError};
+use std::{cell::RefCell, rc::Rc};
+
+use environment::Environment;
 use parser::{Counter, Parser};
 use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
+use visitor::interpreter::{Interpreter, RuntimeError};
 
 pub struct Typhoon {
     had_error: bool,
@@ -30,6 +37,7 @@ impl Typhoon {
         println!("Typhoon {}", self.version);
 
         let mut rl = DefaultEditor::new().expect("failed to create editor");
+        let global_env = Rc::new(RefCell::new(Environment::new(None)));
 
         loop {
             let input = rl.readline("> ").expect("input is read correctly");
@@ -40,12 +48,12 @@ impl Typhoon {
 
             rl.add_history_entry(&input)
                 .expect("input added to history");
-            self.run(input);
+            self.run(input, Rc::clone(&global_env));
             self.had_error = false;
         }
     }
 
-    fn run(&mut self, source: String) {
+    fn run(&mut self, source: String, global_env: Rc<RefCell<Environment>>) {
         let scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens(self);
 
@@ -55,14 +63,15 @@ impl Typhoon {
 
         let parser = Parser::new(tokens);
         let mut counter = Counter::new();
-        let expression = parser.parse(&mut counter, self);
+        let statements = parser.parse(&mut counter, self);
 
-        if expression.is_err() {
+        if statements.is_err() {
             return;
         }
 
-        let mut expression = expression.expect("must have a valid expression");
-        Interpreter::interpret(&mut expression, self);
+        let mut statements = statements.expect("got valid statements");
+
+        Interpreter::interpret(&mut statements, self, global_env);
     }
 
     pub fn error_one(&mut self, line: usize, message: &str) {

@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
     LeftParenthesis,
     RightParenthesis,
@@ -36,8 +36,9 @@ pub enum TokenType {
     Return,
     Super,
     This,
-    Let,
-    None,
+    Var,
+    Undefined,
     Function,
+    Print,
     Eof,
 }
