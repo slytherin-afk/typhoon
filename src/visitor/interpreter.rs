@@ -333,9 +333,11 @@ impl StmtVisitor for Interpreter {
             Object::Undefined
         };
 
-        self.environment
-            .borrow_mut()
-            .define(stmt.name.lexeme.to_string(), value);
+        for name in &stmt.names {
+            self.environment
+                .borrow_mut()
+                .define(name.lexeme.to_string(), value.clone());
+        }
 
         Ok(())
     }

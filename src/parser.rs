@@ -107,12 +107,23 @@ impl Parser {
         counter: &mut Counter,
         typhoon: &mut Typhoon,
     ) -> Result<Stmt, ParseError> {
-        let name = self.consume(
+        let mut names = vec![self.consume(
             TokenType::Identifier,
             counter,
             "Expected an identifier",
             typhoon,
-        )?;
+        )?];
+
+        while self.matches(vec![TokenType::Comma], counter) {
+            let identifier = self.consume(
+                TokenType::Identifier,
+                counter,
+                "Expected an identifier",
+                typhoon,
+            )?;
+
+            names.push(identifier);
+        }
 
         let initializer = if self.matches(vec![TokenType::Equal], counter) {
             Some(self.expression(counter, typhoon)?)
@@ -128,7 +139,7 @@ impl Parser {
         )?;
 
         Ok(Stmt::VariableStmt(Box::new(VariableStmt {
-            name,
+            names,
             initializer,
         })))
     }
