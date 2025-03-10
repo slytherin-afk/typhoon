@@ -7,8 +7,8 @@ use crate::{
         ternary::Ternary, unary::Unary, variable::Variable, Expression,
     },
     stmt::{
-        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, print_stmt::PrintStmt,
-        variable_stmt::VariableStmt, Stmt,
+        block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
+        print_stmt::PrintStmt, variable_stmt::VariableStmt, Stmt,
     },
 };
 
@@ -47,6 +47,7 @@ trait StmtVisitor {
     fn visit_print_stmt(&mut self, stmt: &mut PrintStmt) -> Self::Item;
     fn visit_variable_stmt(&mut self, stmt: &mut VariableStmt) -> Self::Item;
     fn visit_block_stmt(&mut self, stmt: &mut BlockStmt) -> Self::Item;
+    fn visit_exit_stmt(&mut self, stmt: &mut ExitStmt) -> Self::Item;
 }
 
 impl<'a> Stmt<'a> {
@@ -56,6 +57,7 @@ impl<'a> Stmt<'a> {
             Stmt::PrintStmt(print_stmt) => visitor.visit_print_stmt(print_stmt),
             Stmt::VariableStmt(variable_stmt) => visitor.visit_variable_stmt(variable_stmt),
             Stmt::BlockStmt(block_stmt) => visitor.visit_block_stmt(block_stmt),
+            Stmt::ExitStmt(exit_stmt) => visitor.visit_exit_stmt(exit_stmt),
         }
     }
 }

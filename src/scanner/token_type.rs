@@ -40,5 +40,6 @@ pub enum TokenType {
     Undefined,
     Function,
     Print,
+    Exit,
     Eof,
 }

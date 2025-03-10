@@ -9,8 +9,8 @@ use crate::{
         token_type::TokenType,
     },
     stmt::{
-        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, print_stmt::PrintStmt,
-        variable_stmt::VariableStmt, Stmt,
+        block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
+        print_stmt::PrintStmt, variable_stmt::VariableStmt, Stmt,
     },
     Typhoon,
 };
@@ -80,6 +80,8 @@ impl Parser {
     fn stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
         if self.matches(vec![TokenType::Print], counter) {
             self.print_stmt(counter, typhoon)
+        } else if self.matches(vec![TokenType::Exit], counter) {
+            self.exit_stmt(counter, typhoon)
         } else if self.matches(vec![TokenType::LeftBraces], counter) {
             Ok(Stmt::BlockStmt(Box::new(BlockStmt {
                 stmts: self.block_stmt(counter, typhoon)?,
@@ -100,6 +102,25 @@ impl Parser {
         )?;
 
         Ok(Stmt::PrintStmt(Box::new(PrintStmt { expression })))
+    }
+
+    fn exit_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        if self.matches(vec![TokenType::SemiColon], counter) {
+            return Ok(Stmt::ExitStmt(Box::new(ExitStmt { expression: None })));
+        }
+
+        let expression = self.expression(counter, typhoon)?;
+
+        self.consume(
+            TokenType::SemiColon,
+            counter,
+            "Expected ';' at the end of exit expression",
+            typhoon,
+        )?;
+
+        Ok(Stmt::ExitStmt(Box::new(ExitStmt {
+            expression: Some(expression),
+        })))
     }
 
     fn variable_stmt(

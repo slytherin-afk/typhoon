@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, process::exit, rc::Rc};
 
 use crate::{
     environment::Environment,
@@ -310,7 +310,7 @@ impl ExpressionVisitor for Interpreter {
 impl StmtVisitor for Interpreter {
     type Item = Result<(), RuntimeError>;
 
-    fn visit_expression_stmt(&mut self, stmt: &mut ExpressionStmt) -> Self::Item {
+    fn visit_print_stmt(&mut self, stmt: &mut PrintStmt) -> Self::Item {
         let value = self.evaluate(&mut stmt.expression)?;
 
         println!("{}", value);
@@ -318,7 +318,26 @@ impl StmtVisitor for Interpreter {
         Ok(())
     }
 
-    fn visit_print_stmt(&mut self, stmt: &mut PrintStmt) -> Self::Item {
+    fn visit_exit_stmt(&mut self, stmt: &mut crate::stmt::exit_stmt::ExitStmt) -> Self::Item {
+        let exit_code = match &mut stmt.expression {
+            Some(expression) => {
+                let value = self.evaluate(expression)?;
+                match value {
+                    Object::Number(_) | Object::Boolean(_) => Self::to_number(&value) as i32,
+                    _ => {
+                        println!("{value}");
+
+                        1
+                    }
+                }
+            }
+            None => 0,
+        };
+
+        exit(exit_code);
+    }
+
+    fn visit_expression_stmt(&mut self, stmt: &mut ExpressionStmt) -> Self::Item {
         let value = self.evaluate(&mut stmt.expression)?;
 
         println!("{}", value);

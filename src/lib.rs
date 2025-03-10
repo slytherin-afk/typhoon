@@ -42,11 +42,6 @@ impl Typhoon {
 
         loop {
             let input = rl.readline("> ").expect("input is read correctly");
-
-            if input == "exit()" {
-                break;
-            }
-
             rl.add_history_entry(&input)
                 .expect("input added to history");
             self.run(input, Rc::clone(&global_env));
