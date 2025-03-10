@@ -14,6 +14,7 @@ use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
 use visitor::interpreter::{Interpreter, RuntimeError};
 
+#[allow(dead_code)]
 pub struct Typhoon {
     had_error: bool,
     had_runtime_error: bool,
@@ -88,10 +89,7 @@ impl Typhoon {
     }
 
     pub fn runtime_error(&mut self, runtime_error: &RuntimeError) {
-        println!(
-            "{}\n[line {}]",
-            runtime_error.message, runtime_error.token.line
-        );
+        println!("[{}] {}", runtime_error.token.line, runtime_error.message);
 
         self.had_error = true;
     }

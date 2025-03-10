@@ -311,7 +311,9 @@ impl StmtVisitor for Interpreter {
     type Item = Result<(), RuntimeError>;
 
     fn visit_expression_stmt(&mut self, stmt: &mut ExpressionStmt) -> Self::Item {
-        self.evaluate(&mut stmt.expression)?;
+        let value = self.evaluate(&mut stmt.expression)?;
+
+        println!("{}", value);
 
         Ok(())
     }
