@@ -55,9 +55,15 @@ impl Interpreter {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, block: &mut BlockStmt) -> Result<(), RuntimeError> {
-        let env = Rc::new(RefCell::new(Environment::new(None)));
-        let previous_env = std::mem::replace(&mut self.environment, env);
+    fn execute_block(
+        &mut self,
+        block: &mut BlockStmt,
+        env: Rc<RefCell<Environment>>,
+    ) -> Result<(), RuntimeError> {
+        let previous_env = Rc::clone(&self.environment);
+
+        self.environment = env;
+
         let mut error = None;
 
         for stmt in &mut block.stmts {
@@ -333,7 +339,12 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_block_stmt(&mut self, stmt: &mut BlockStmt) -> Self::Item {
-        self.execute_block(stmt)?;
+        self.execute_block(
+            stmt,
+            Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
+                &self.environment,
+            ))))),
+        )?;
 
         Ok(())
     }

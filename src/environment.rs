@@ -1,21 +1,17 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{object::Object, scanner::token::Token, visitor::interpreter::RuntimeError};
 
 pub struct Environment {
     values: HashMap<String, Object>,
-    enclosing: Option<Box<Environment>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {
-    pub fn new(enclosing: Option<Environment>) -> Self {
+    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
         Self {
             values: HashMap::new(),
-            enclosing: if let Some(env) = enclosing {
-                Some(Box::new(env))
-            } else {
-                None
-            },
+            enclosing,
         }
     }
 
@@ -23,7 +19,7 @@ impl Environment {
         if self.values.contains_key(&token.lexeme) {
             Ok(self.values.get(&token.lexeme).unwrap().clone())
         } else if let Some(env) = &self.enclosing {
-            return env.get(token);
+            return env.borrow().get(token);
         } else {
             Err(RuntimeError {
                 token: token.clone(),
@@ -38,7 +34,7 @@ impl Environment {
 
             Ok(())
         } else if let Some(env) = &mut self.enclosing {
-            return env.assign(token, value);
+            return env.borrow_mut().assign(token, value);
         } else {
             Err(RuntimeError {
                 token: token.clone(),
