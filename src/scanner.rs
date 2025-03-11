@@ -123,108 +123,100 @@ impl Scanner {
             self.identifier();
         } else if c == ' ' || c == '\r' || c == '\t' {
         } else {
-            typhoon.error_one(self.line, "Unexpected Character Error");
+            typhoon.error_one(self.line, "Unexpected character");
         }
     }
 
     fn slash(&mut self, typhoon: &mut Typhoon) {
-        if self.peek() == '/' {
-            loop {
-                self.advance();
-
-                if self.peek() == '\n' || self.is_at_end() {
-                    break;
+        match self.peek() {
+            '/' => {
+                while self.peek() != '\n' && !self.is_at_end() {
+                    self.advance();
                 }
             }
-        } else if self.peek() == '*' {
-            loop {
+            '*' => {
                 self.advance();
 
-                if self.is_at_end() {
-                    typhoon.error_one(self.line, "Unexpected Character Error");
+                while !self.is_at_end() {
+                    if self.peek() == '\n' {
+                        self.line += 1;
+                    }
 
-                    break;
+                    if self.peek() == '*' && self.peek_next() == '/' {
+                        self.advance();
+                        self.advance();
+
+                        return;
+                    }
+
+                    self.advance();
                 }
 
-                if self.peek() == '*' && self.peek_next() == '/' {
-                    self.advance();
-                    self.advance();
-
-                    break;
-                }
+                typhoon.error_one(self.line, "Expect a '*/'");
             }
-        } else {
-            self.add_token(TokenType::Slash);
+            _ => {
+                self.add_token(TokenType::Slash);
+            }
         }
     }
 
     fn string_literal(&mut self, typhoon: &mut Typhoon) {
-        loop {
-            if self.peek() == '"' {
-                self.advance();
+        while !self.is_at_end() {
+            match self.peek() {
+                '"' => {
+                    self.advance();
 
-                break;
+                    let literal = &self.source[self.start + 1..self.current - 1];
+
+                    self.add_token_with_literal(
+                        TokenType::StringLiteral,
+                        Some(LiteralType::String(literal.to_string())),
+                    );
+
+                    return;
+                }
+                '\n' => {
+                    self.current += 1;
+
+                    break;
+                }
+                _ => {
+                    self.advance();
+                }
             }
-
-            if self.is_at_end() {
-                typhoon.error_one(self.line, "Unexpected Character Error");
-
-                break;
-            }
-
-            self.advance();
         }
 
-        let literal = &self.source[self.start + 1..self.current - 1];
-
-        self.add_token_with_literal(
-            TokenType::StringLiteral,
-            Some(LiteralType::String(literal.to_string())),
-        );
+        typhoon.error_one(self.line, "Unterminated string literal");
     }
 
     fn number_literal(&mut self) {
-        loop {
-            if self.peek().is_digit(10) {
-                self.advance();
-            } else {
-                break;
-            }
+        while self.peek().is_digit(10) {
+            self.advance();
         }
 
         if self.peek() == '.' && self.peek_next().is_digit(10) {
             self.advance();
 
-            loop {
-                if self.peek().is_digit(10) {
-                    self.advance();
-                } else {
-                    break;
-                }
+            while self.peek().is_digit(10) {
+                self.advance();
             }
         }
 
         let number = self.source[self.start..self.current]
             .parse()
-            .expect("a number literal");
+            .expect("Valid number literal");
 
         self.add_token_with_literal(TokenType::NumberLiteral, Some(LiteralType::Number(number)));
     }
 
     fn identifier(&mut self) {
-        loop {
-            let peek = self.peek();
-
-            if Self::is_alphabetic(peek) || peek.is_digit(10) {
-                self.advance();
-            } else {
-                break;
-            }
+        while Self::is_alphabetic(self.peek()) || self.peek().is_digit(10) {
+            self.advance();
         }
 
         let lexeme = &self.source[self.start..self.current];
         let token_type = if let Some(token_type) = KEYWORDS.get(lexeme) {
-            *token_type
+            token_type.clone()
         } else {
             TokenType::Identifier
         };
@@ -263,11 +255,7 @@ impl Scanner {
     }
 
     fn advance(&mut self) -> char {
-        let c = self
-            .source
-            .chars()
-            .nth(self.current)
-            .expect("source have a character");
+        let c = self.source.chars().nth(self.current).unwrap();
 
         self.current += 1;
 
