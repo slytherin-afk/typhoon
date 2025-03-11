@@ -3,6 +3,7 @@ pub mod binary;
 pub mod comma;
 pub mod grouping;
 pub mod literal;
+pub mod logical;
 pub mod ternary;
 pub mod unary;
 pub mod variable;
@@ -12,6 +13,7 @@ use binary::Binary;
 use comma::Comma;
 use grouping::Grouping;
 use literal::Literal;
+use logical::Logical;
 use ternary::Ternary;
 use unary::Unary;
 use variable::Variable;
@@ -25,4 +27,5 @@ pub enum Expression<'a> {
     Literal(Box<Literal>),
     Variable(Box<Variable<'a>>),
     Assignment(Box<Assignment<'a>>),
+    Logical(Box<Logical<'a>>),
 }

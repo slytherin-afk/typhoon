@@ -1,14 +1,13 @@
-pub mod ast_printer;
 pub mod interpreter;
 
 use crate::{
     expression::{
         assignment::Assignment, binary::Binary, comma::Comma, grouping::Grouping, literal::Literal,
-        ternary::Ternary, unary::Unary, variable::Variable, Expression,
+        logical::Logical, ternary::Ternary, unary::Unary, variable::Variable, Expression,
     },
     stmt::{
         block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
-        print_stmt::PrintStmt, variable_stmt::VariableStmt, Stmt,
+        if_stmt::IfStmt, print_stmt::PrintStmt, variable_stmt::VariableStmt, Stmt,
     },
 };
 
@@ -23,6 +22,7 @@ trait ExpressionVisitor {
     fn visit_literal(&mut self, expr: &mut Literal) -> Self::Item;
     fn visit_variable(&mut self, expr: &mut Variable) -> Self::Item;
     fn visit_assignment(&mut self, expr: &mut Assignment) -> Self::Item;
+    fn visit_logical(&mut self, expr: &mut Logical) -> Self::Item;
 }
 
 impl<'a> Expression<'a> {
@@ -36,6 +36,7 @@ impl<'a> Expression<'a> {
             Expression::Literal(literal) => visitor.visit_literal(literal),
             Expression::Variable(variable) => visitor.visit_variable(variable),
             Expression::Assignment(assignment) => visitor.visit_assignment(assignment),
+            Expression::Logical(logical) => visitor.visit_logical(logical),
         }
     }
 }
@@ -48,6 +49,7 @@ trait StmtVisitor {
     fn visit_variable_stmt(&mut self, stmt: &mut VariableStmt) -> Self::Item;
     fn visit_block_stmt(&mut self, stmt: &mut BlockStmt) -> Self::Item;
     fn visit_exit_stmt(&mut self, stmt: &mut ExitStmt) -> Self::Item;
+    fn visit_if_stmt(&mut self, stmt: &mut IfStmt) -> Self::Item;
 }
 
 impl<'a> Stmt<'a> {
@@ -58,6 +60,7 @@ impl<'a> Stmt<'a> {
             Stmt::VariableStmt(variable_stmt) => visitor.visit_variable_stmt(variable_stmt),
             Stmt::BlockStmt(block_stmt) => visitor.visit_block_stmt(block_stmt),
             Stmt::ExitStmt(exit_stmt) => visitor.visit_exit_stmt(exit_stmt),
+            Stmt::IfStmt(if_stmt) => visitor.visit_if_stmt(if_stmt),
         }
     }
 }

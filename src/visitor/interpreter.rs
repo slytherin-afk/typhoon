@@ -3,14 +3,14 @@ use std::{cell::RefCell, process::exit, rc::Rc};
 use crate::{
     environment::Environment,
     expression::{
-        binary::Binary, comma::Comma, grouping::Grouping, literal::Literal, ternary::Ternary,
-        unary::Unary, variable::Variable, Expression,
+        assignment::Assignment, binary::Binary, comma::Comma, grouping::Grouping, literal::Literal,
+        logical::Logical, ternary::Ternary, unary::Unary, variable::Variable, Expression,
     },
     object::Object,
     scanner::{token::Token, token_type::TokenType},
     stmt::{
-        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, print_stmt::PrintStmt,
-        variable_stmt::VariableStmt, Stmt,
+        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, if_stmt::IfStmt,
+        print_stmt::PrintStmt, variable_stmt::VariableStmt, Stmt,
     },
     Typhoon,
 };
@@ -293,15 +293,36 @@ impl ExpressionVisitor for Interpreter {
         self.environment.borrow().get(&expr.name)
     }
 
-    fn visit_assignment(
-        &mut self,
-        expr: &mut crate::expression::assignment::Assignment,
-    ) -> Self::Item {
+    fn visit_assignment(&mut self, expr: &mut Assignment) -> Self::Item {
         let value = self.evaluate(&mut expr.expression)?;
 
         self.environment
             .borrow_mut()
             .assign(expr.name, value.clone())?;
+
+        Ok(value)
+    }
+
+    fn visit_logical(&mut self, expr: &mut Logical) -> Self::Item {
+        let left = self.evaluate(&mut expr.left)?;
+        let is_truthy = Self::is_truthy(&left);
+        let value = match expr.operator.token_type {
+            TokenType::And => {
+                if is_truthy {
+                    self.evaluate(&mut expr.right)?
+                } else {
+                    left
+                }
+            }
+            TokenType::Or => {
+                if is_truthy {
+                    left
+                } else {
+                    self.evaluate(&mut expr.right)?
+                }
+            }
+            _ => unreachable!(),
+        };
 
         Ok(value)
     }
@@ -346,16 +367,16 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_variable_stmt(&mut self, stmt: &mut VariableStmt) -> Self::Item {
-        let value = if let Some(expr) = &mut stmt.initializer {
-            self.evaluate(expr)?
-        } else {
-            Object::Undefined
-        };
+        for var in &mut stmt.variables {
+            let value = if let Some(expr) = &mut var.initializer {
+                self.evaluate(expr)?
+            } else {
+                Object::Undefined
+            };
 
-        for name in &stmt.names {
             self.environment
                 .borrow_mut()
-                .define(name.lexeme.to_string(), value.clone());
+                .define(var.name.lexeme.to_string(), value.clone());
         }
 
         Ok(())
@@ -368,6 +389,18 @@ impl StmtVisitor for Interpreter {
                 &self.environment,
             ))))),
         )?;
+
+        Ok(())
+    }
+
+    fn visit_if_stmt(&mut self, stmt: &mut IfStmt) -> Self::Item {
+        let condition = self.evaluate(&mut stmt.condition)?;
+
+        if Self::is_truthy(&condition) {
+            self.execute(&mut stmt.truth)?;
+        } else if let Some(falsy_stmt) = &mut stmt.falsy {
+            self.execute(falsy_stmt)?;
+        }
 
         Ok(())
     }
