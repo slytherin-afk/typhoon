@@ -52,10 +52,10 @@ impl Parser {
         let mut statements = vec![];
 
         while !self.is_at_end(counter) {
-            statements.push(self.declaration_stmt(counter, typhoon)?);
+            statements.push(self.declaration_stmt(counter, typhoon));
         }
 
-        Ok(statements)
+        statements.into_iter().collect()
     }
 
     fn declaration_stmt(
