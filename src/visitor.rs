@@ -6,9 +6,9 @@ use crate::{
         logical::Logical, ternary::Ternary, unary::Unary, variable::Variable, Expression,
     },
     stmt::{
-        block_stmt::BlockStmt, empty_stmt::EmptyStmt, exit_stmt::ExitStmt,
-        expression_stmt::ExpressionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
-        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
+        block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
+        if_stmt::IfStmt, print_stmt::PrintStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt,
+        Stmt,
     },
 };
 
@@ -51,8 +51,10 @@ trait StmtVisitor {
     fn visit_block_stmt(&mut self, stmt: &mut BlockStmt) -> Self::Item;
     fn visit_exit_stmt(&mut self, stmt: &mut ExitStmt) -> Self::Item;
     fn visit_if_stmt(&mut self, stmt: &mut IfStmt) -> Self::Item;
-    fn visit_empty_stmt(&mut self, stmt: &mut EmptyStmt) -> Self::Item;
     fn visit_while_stmt(&mut self, stmt: &mut WhileStmt) -> Self::Item;
+    fn visit_empty_stmt(&mut self) -> Self::Item;
+    fn visit_continue_stmt(&mut self) -> Self::Item;
+    fn visit_break_stmt(&mut self) -> Self::Item;
 }
 
 impl<'a> Stmt<'a> {
@@ -65,7 +67,9 @@ impl<'a> Stmt<'a> {
             Stmt::ExitStmt(exit_stmt) => visitor.visit_exit_stmt(exit_stmt),
             Stmt::IfStmt(if_stmt) => visitor.visit_if_stmt(if_stmt),
             Stmt::WhileStmt(while_stmt) => visitor.visit_while_stmt(while_stmt),
-            Stmt::EmptyStmt(empty_stmt) => visitor.visit_empty_stmt(empty_stmt),
+            Stmt::EmptyStmt => visitor.visit_empty_stmt(),
+            Stmt::ContinueStmt => visitor.visit_continue_stmt(),
+            Stmt::BreakStmt => visitor.visit_break_stmt(),
         }
     }
 }

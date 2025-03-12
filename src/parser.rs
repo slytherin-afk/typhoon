@@ -10,7 +10,6 @@ use crate::{
     },
     stmt::{
         block_stmt::BlockStmt,
-        empty_stmt::EmptyStmt,
         exit_stmt::ExitStmt,
         expression_stmt::ExpressionStmt,
         if_stmt::IfStmt,
@@ -24,11 +23,15 @@ use crate::{
 
 pub struct Counter {
     current: usize,
+    loop_depth: usize,
 }
 
 impl Counter {
     pub fn new() -> Self {
-        Self { current: 0 }
+        Self {
+            current: 0,
+            loop_depth: 0,
+        }
     }
 }
 
@@ -128,7 +131,31 @@ impl Parser {
                 stmts: self.block_stmt(counter, typhoon)?,
             })))
         } else if self.matches(&[TokenType::SemiColon], counter) {
-            Ok(Stmt::EmptyStmt(Box::new(EmptyStmt)))
+            Ok(Stmt::EmptyStmt)
+        } else if self.matches(&[TokenType::Break], counter) {
+            if counter.loop_depth == 0 {
+                return Err(Self::error(
+                    self.previous(counter),
+                    "Break can only be used in a loop",
+                    typhoon,
+                ));
+            }
+
+            self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+
+            Ok(Stmt::BreakStmt)
+        } else if self.matches(&[TokenType::Continue], counter) {
+            if counter.loop_depth == 0 {
+                return Err(Self::error(
+                    self.previous(counter),
+                    "Continue can only be used in a loop",
+                    typhoon,
+                ));
+            }
+
+            self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+
+            Ok(Stmt::ContinueStmt)
         } else {
             self.expr_stmt(counter, typhoon)
         }
@@ -182,7 +209,9 @@ impl Parser {
             typhoon,
         )?;
 
+        counter.loop_depth += 1;
         let body = self.stmt(counter, typhoon)?;
+        counter.loop_depth -= 1;
 
         Ok(Stmt::WhileStmt(Box::new(WhileStmt { condition, body })))
     }
@@ -204,9 +233,11 @@ impl Parser {
         };
 
         let condition = if self.check(&TokenType::SemiColon, counter) {
-            None
+            Expression::Literal(Box::new(Literal {
+                value: Object::Boolean(true),
+            }))
         } else {
-            Some(self.expression(counter, typhoon)?)
+            self.expression(counter, typhoon)?
         };
 
         self.consume(
@@ -229,7 +260,9 @@ impl Parser {
             typhoon,
         )?;
 
+        counter.loop_depth += 1;
         let mut body = self.stmt(counter, typhoon)?;
+        counter.loop_depth -= 1;
 
         if let Some(expression) = increment {
             body = Stmt::BlockStmt(Box::new(BlockStmt {
@@ -240,9 +273,7 @@ impl Parser {
             }));
         }
 
-        if let Some(condition) = condition {
-            body = Stmt::WhileStmt(Box::new(WhileStmt { condition, body }));
-        }
+        body = Stmt::WhileStmt(Box::new(WhileStmt { condition, body }));
 
         if let Some(initializer) = initializer {
             body = Stmt::BlockStmt(Box::new(BlockStmt {

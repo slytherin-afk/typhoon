@@ -9,9 +9,9 @@ use crate::{
     object::Object,
     scanner::{token::Token, token_type::TokenType},
     stmt::{
-        block_stmt::BlockStmt, empty_stmt::EmptyStmt, exit_stmt::ExitStmt,
-        expression_stmt::ExpressionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
-        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
+        block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
+        if_stmt::IfStmt, print_stmt::PrintStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt,
+        Stmt,
     },
     Typhoon,
 };
@@ -29,6 +29,16 @@ impl RuntimeError {
     }
 }
 
+pub struct BreakException;
+
+pub struct ContinueException;
+
+pub enum Error {
+    RuntimeError(RuntimeError),
+    BreakException,
+    ContinueException,
+}
+
 pub struct Interpreter {
     environment: Rc<RefCell<Environment>>,
 }
@@ -43,7 +53,10 @@ impl Interpreter {
 
         for stmt in stmts {
             if let Err(e) = interpreter.execute(stmt) {
-                typhoon.runtime_error(&e);
+                match e {
+                    Error::RuntimeError(runtime_error) => typhoon.runtime_error(&runtime_error),
+                    _ => unreachable!(),
+                };
             }
         }
     }
@@ -52,7 +65,11 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn execute(&mut self, stmt: &mut Stmt) -> Result<(), RuntimeError> {
+    fn evaluate_and_map_error(&mut self, expr: &mut Expression) -> Result<Object, Error> {
+        self.evaluate(expr).map_err(|e| Error::RuntimeError(e))
+    }
+
+    fn execute(&mut self, stmt: &mut Stmt) -> Result<(), Error> {
         stmt.accept(self)
     }
 
@@ -60,11 +77,9 @@ impl Interpreter {
         &mut self,
         block: &mut BlockStmt,
         env: Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<(), Error> {
         let previous_env = Rc::clone(&self.environment);
-
         self.environment = env;
-
         let mut error = None;
 
         for stmt in &mut block.stmts {
@@ -330,10 +345,10 @@ impl ExpressionVisitor for Interpreter {
 }
 
 impl StmtVisitor for Interpreter {
-    type Item = Result<(), RuntimeError>;
+    type Item = Result<(), Error>;
 
     fn visit_print_stmt(&mut self, stmt: &mut PrintStmt) -> Self::Item {
-        let value = self.evaluate(&mut stmt.expression)?;
+        let value = self.evaluate_and_map_error(&mut stmt.expression)?;
 
         println!("{}", value);
 
@@ -343,7 +358,7 @@ impl StmtVisitor for Interpreter {
     fn visit_exit_stmt(&mut self, stmt: &mut ExitStmt) -> Self::Item {
         let exit_code = match &mut stmt.expression {
             Some(expression) => {
-                let value = self.evaluate(expression)?;
+                let value = self.evaluate_and_map_error(expression)?;
                 match value {
                     Object::Number(_) | Object::Boolean(_) => Self::to_number(&value) as i32,
                     _ => {
@@ -360,7 +375,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_expression_stmt(&mut self, stmt: &mut ExpressionStmt) -> Self::Item {
-        let value = self.evaluate(&mut stmt.expression)?;
+        let value = self.evaluate_and_map_error(&mut stmt.expression)?;
 
         println!("{}", value);
 
@@ -370,7 +385,7 @@ impl StmtVisitor for Interpreter {
     fn visit_variable_stmt(&mut self, stmt: &mut VariableStmt) -> Self::Item {
         for var in &mut stmt.variables {
             let value = if let Some(expr) = &mut var.initializer {
-                self.evaluate(expr)?
+                self.evaluate_and_map_error(expr)?
             } else {
                 Object::Undefined
             };
@@ -395,7 +410,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_if_stmt(&mut self, stmt: &mut IfStmt) -> Self::Item {
-        let condition = self.evaluate(&mut stmt.condition)?;
+        let condition = self.evaluate_and_map_error(&mut stmt.condition)?;
 
         if Self::is_truthy(&condition) {
             self.execute(&mut stmt.truth)?;
@@ -407,14 +422,30 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_while_stmt(&mut self, stmt: &mut WhileStmt) -> Self::Item {
-        while Self::is_truthy(&self.evaluate(&mut stmt.condition)?) {
-            self.execute(&mut stmt.body)?;
+        while Self::is_truthy(&self.evaluate_and_map_error(&mut stmt.condition)?) {
+            let result = self.execute(&mut stmt.body);
+
+            if let Err(e) = &result {
+                match e {
+                    Error::BreakException => break,
+                    Error::ContinueException => continue,
+                    _ => result?,
+                }
+            }
         }
 
         Ok(())
     }
 
-    fn visit_empty_stmt(&mut self, _: &mut EmptyStmt) -> Self::Item {
+    fn visit_empty_stmt(&mut self) -> Self::Item {
         Ok(())
+    }
+
+    fn visit_continue_stmt(&mut self) -> Self::Item {
+        Err(Error::ContinueException)
+    }
+
+    fn visit_break_stmt(&mut self) -> Self::Item {
+        Err(Error::BreakException)
     }
 }
