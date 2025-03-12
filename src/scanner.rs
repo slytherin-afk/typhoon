@@ -24,6 +24,8 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "function" => TokenType::Function,
     "print" => TokenType::Print,
     "exit" => TokenType::Exit,
+    "break" => TokenType::Break,
+    "continue" => TokenType::Continue,
 };
 
 pub struct Scanner {

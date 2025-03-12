@@ -9,8 +9,9 @@ use crate::{
     object::Object,
     scanner::{token::Token, token_type::TokenType},
     stmt::{
-        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, if_stmt::IfStmt,
-        print_stmt::PrintStmt, variable_stmt::VariableStmt, Stmt,
+        block_stmt::BlockStmt, empty_stmt::EmptyStmt, exit_stmt::ExitStmt,
+        expression_stmt::ExpressionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
+        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
     },
     Typhoon,
 };
@@ -339,7 +340,7 @@ impl StmtVisitor for Interpreter {
         Ok(())
     }
 
-    fn visit_exit_stmt(&mut self, stmt: &mut crate::stmt::exit_stmt::ExitStmt) -> Self::Item {
+    fn visit_exit_stmt(&mut self, stmt: &mut ExitStmt) -> Self::Item {
         let exit_code = match &mut stmt.expression {
             Some(expression) => {
                 let value = self.evaluate(expression)?;
@@ -402,6 +403,18 @@ impl StmtVisitor for Interpreter {
             self.execute(falsy_stmt)?;
         }
 
+        Ok(())
+    }
+
+    fn visit_while_stmt(&mut self, stmt: &mut WhileStmt) -> Self::Item {
+        while Self::is_truthy(&self.evaluate(&mut stmt.condition)?) {
+            self.execute(&mut stmt.body)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_empty_stmt(&mut self, _: &mut EmptyStmt) -> Self::Item {
         Ok(())
     }
 }

@@ -10,11 +10,13 @@ use crate::{
     },
     stmt::{
         block_stmt::BlockStmt,
+        empty_stmt::EmptyStmt,
         exit_stmt::ExitStmt,
         expression_stmt::ExpressionStmt,
         if_stmt::IfStmt,
         print_stmt::PrintStmt,
         variable_stmt::{VariableDeclaration, VariableStmt},
+        while_stmt::WhileStmt,
         Stmt,
     },
     Typhoon,
@@ -113,6 +115,10 @@ impl Parser {
     fn stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
         if self.matches(&[TokenType::If], counter) {
             self.if_stmt(counter, typhoon)
+        } else if self.matches(&[TokenType::While], counter) {
+            self.while_stmt(counter, typhoon)
+        } else if self.matches(&[TokenType::For], counter) {
+            self.for_stmt(counter, typhoon)
         } else if self.matches(&[TokenType::Print], counter) {
             self.print_stmt(counter, typhoon)
         } else if self.matches(&[TokenType::Exit], counter) {
@@ -121,6 +127,8 @@ impl Parser {
             Ok(Stmt::BlockStmt(Box::new(BlockStmt {
                 stmts: self.block_stmt(counter, typhoon)?,
             })))
+        } else if self.matches(&[TokenType::SemiColon], counter) {
+            Ok(Stmt::EmptyStmt(Box::new(EmptyStmt)))
         } else {
             self.expr_stmt(counter, typhoon)
         }
@@ -157,6 +165,94 @@ impl Parser {
         })))
     }
 
+    fn while_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        self.consume(
+            &TokenType::LeftParenthesis,
+            counter,
+            "Expect a '(' after while",
+            typhoon,
+        )?;
+
+        let condition = self.expression(counter, typhoon)?;
+
+        self.consume(
+            &TokenType::RightParenthesis,
+            counter,
+            "Expect a ')' before while body",
+            typhoon,
+        )?;
+
+        let body = self.stmt(counter, typhoon)?;
+
+        Ok(Stmt::WhileStmt(Box::new(WhileStmt { condition, body })))
+    }
+
+    fn for_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        self.consume(
+            &TokenType::LeftParenthesis,
+            counter,
+            "Expect a '(' after for",
+            typhoon,
+        )?;
+
+        let initializer = if self.matches(&[TokenType::SemiColon], counter) {
+            None
+        } else if self.matches(&[TokenType::Var], counter) {
+            Some(self.variable_stmt(counter, typhoon)?)
+        } else {
+            Some(self.expr_stmt(counter, typhoon)?)
+        };
+
+        let condition = if self.check(&TokenType::SemiColon, counter) {
+            None
+        } else {
+            Some(self.expression(counter, typhoon)?)
+        };
+
+        self.consume(
+            &TokenType::SemiColon,
+            counter,
+            "Expect a ';' after conditional expression",
+            typhoon,
+        )?;
+
+        let increment = if self.check(&TokenType::RightParenthesis, counter) {
+            None
+        } else {
+            Some(self.expression(counter, typhoon)?)
+        };
+
+        self.consume(
+            &TokenType::RightParenthesis,
+            counter,
+            "Expect a ')' before for body",
+            typhoon,
+        )?;
+
+        let mut body = self.stmt(counter, typhoon)?;
+
+        if let Some(expression) = increment {
+            body = Stmt::BlockStmt(Box::new(BlockStmt {
+                stmts: vec![
+                    body,
+                    Stmt::ExpressionStmt(Box::new(ExpressionStmt { expression })),
+                ],
+            }));
+        }
+
+        if let Some(condition) = condition {
+            body = Stmt::WhileStmt(Box::new(WhileStmt { condition, body }));
+        }
+
+        if let Some(initializer) = initializer {
+            body = Stmt::BlockStmt(Box::new(BlockStmt {
+                stmts: vec![initializer, body],
+            }));
+        }
+
+        Ok(body)
+    }
+
     fn print_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
         let expression = self.expression(counter, typhoon)?;
 
@@ -179,16 +275,6 @@ impl Parser {
         })))
     }
 
-    fn expr_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
-        let expression = self.expression(counter, typhoon)?;
-
-        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
-
-        Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt {
-            expression,
-        })))
-    }
-
     fn block_stmt(
         &self,
         counter: &mut Counter,
@@ -203,6 +289,16 @@ impl Parser {
         self.consume(&TokenType::RightBraces, counter, "Expect a '}'", typhoon)?;
 
         Ok(stmts)
+    }
+
+    fn expr_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+        let expression = self.expression(counter, typhoon)?;
+
+        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+
+        Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt {
+            expression,
+        })))
     }
 
     fn expression(
@@ -496,7 +592,11 @@ impl Parser {
             ],
             counter,
         ) {
-            Self::error(self.peek(counter), "Expect an expression", typhoon);
+            Self::error(
+                self.peek(counter),
+                "Binary operator required left hand expression",
+                typhoon,
+            );
 
             return self.expression(counter, typhoon);
         }

@@ -42,5 +42,7 @@ pub enum TokenType {
     Print,
     Exit,
     NewLine,
+    Break,
+    Continue,
     Eof,
 }
