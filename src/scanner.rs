@@ -176,8 +176,6 @@ impl Scanner {
                     return;
                 }
                 '\n' => {
-                    self.current += 1;
-
                     break;
                 }
                 _ => {
@@ -225,17 +223,13 @@ impl Scanner {
     }
 
     fn matches(&mut self, expected: char) -> bool {
-        if self.is_at_end() {
-            return false;
-        }
-
-        if self.peek() == expected {
+        if self.is_at_end() || self.peek() != expected {
+            false
+        } else {
             self.current += 1;
 
-            return true;
+            true
         }
-
-        false
     }
 
     fn peek(&self) -> char {
