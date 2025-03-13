@@ -21,10 +21,10 @@ impl Environment {
         } else if let Some(env) = &self.enclosing {
             return env.borrow().get(token);
         } else {
-            Err(RuntimeError {
-                token: token.clone(),
-                message: format!("Undefined variable '{}'", token.lexeme),
-            })
+            Err(RuntimeError::new(
+                token.clone(),
+                format!("Undefined variable '{}'", token.lexeme),
+            ))
         }
     }
 
@@ -36,10 +36,10 @@ impl Environment {
         } else if let Some(env) = &mut self.enclosing {
             return env.borrow_mut().assign(token, value);
         } else {
-            Err(RuntimeError {
-                token: token.clone(),
-                message: format!("Undefined variable '{}'", token.lexeme),
-            })
+            Err(RuntimeError::new(
+                token.clone(),
+                format!("Undefined variable '{}'", token.lexeme),
+            ))
         }
     }
 

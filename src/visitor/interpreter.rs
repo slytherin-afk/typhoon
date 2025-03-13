@@ -25,13 +25,21 @@ use crate::{
 use super::{ExpressionVisitor, StmtVisitor};
 
 pub struct RuntimeError {
-    pub token: Token,
-    pub message: String,
+    token: Token,
+    message: String,
 }
 
 impl RuntimeError {
     pub fn new(token: Token, message: String) -> Self {
         Self { token, message }
+    }
+
+    pub fn token(&self) -> &Token {
+        &self.token
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }
 
@@ -247,18 +255,18 @@ impl ExpressionVisitor for Interpreter {
                 let arity = (c.arity)();
 
                 if arguments.len() < arity {
-                    Err(RuntimeError {
-                        message: format!("Expected [{arity}] arguments got [{}]", arguments.len()),
-                        token: expr.paren.clone(),
-                    })
+                    Err(RuntimeError::new(
+                        expr.paren.clone(),
+                        format!("Expected [{arity}] arguments got [{}]", arguments.len()),
+                    ))
                 } else {
                     (c.call)(self.clone(), arguments)
                 }
             }
-            _ => Err(RuntimeError {
-                message: "Can only call functions and classes".to_string(),
-                token: expr.paren.clone(),
-            }),
+            _ => Err(RuntimeError::new(
+                expr.paren.clone(),
+                "Can only call functions and classes".to_string(),
+            )),
         }
     }
 }

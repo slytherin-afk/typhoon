@@ -83,7 +83,11 @@ impl Lib {
     }
 
     pub fn runtime_error(runtime_error: &RuntimeError) {
-        println!("[{}] {}", runtime_error.token.line, runtime_error.message);
+        println!(
+            "[{}] {}",
+            runtime_error.token().line,
+            runtime_error.message()
+        );
 
         unsafe {
             HAD_RUNTIME_ERROR = true;
