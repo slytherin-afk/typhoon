@@ -1,3 +1,5 @@
+pub mod operations;
+
 use std::{cell::RefCell, process::exit, rc::Rc};
 
 use crate::{
@@ -13,7 +15,7 @@ use crate::{
         if_stmt::IfStmt, print_stmt::PrintStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt,
         Stmt,
     },
-    Typhoon,
+    Lib,
 };
 
 use super::{ExpressionVisitor, StmtVisitor};
@@ -33,7 +35,7 @@ pub struct BreakException;
 
 pub struct ContinueException;
 
-pub enum Error {
+pub enum Exception {
     RuntimeError(RuntimeError),
     BreakException,
     ContinueException,
@@ -44,17 +46,13 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn interpret(
-        stmts: &mut Vec<Stmt>,
-        typhoon: &mut Typhoon,
-        environment: Rc<RefCell<Environment>>,
-    ) {
+    pub fn interpret(stmts: &mut Vec<Stmt>, lib: &mut Lib, environment: Rc<RefCell<Environment>>) {
         let mut interpreter = Self { environment };
 
         for stmt in stmts {
             if let Err(e) = interpreter.execute(stmt) {
                 match e {
-                    Error::RuntimeError(runtime_error) => typhoon.runtime_error(&runtime_error),
+                    Exception::RuntimeError(runtime_error) => lib.runtime_error(&runtime_error),
                     _ => unreachable!(),
                 };
             }
@@ -65,11 +63,11 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn evaluate_and_map_error(&mut self, expr: &mut Expression) -> Result<Object, Error> {
-        self.evaluate(expr).map_err(|e| Error::RuntimeError(e))
+    fn evaluate_and_map_error(&mut self, expr: &mut Expression) -> Result<Object, Exception> {
+        self.evaluate(expr).map_err(|e| Exception::RuntimeError(e))
     }
 
-    fn execute(&mut self, stmt: &mut Stmt) -> Result<(), Error> {
+    fn execute(&mut self, stmt: &mut Stmt) -> Result<(), Exception> {
         stmt.accept(self)
     }
 
@@ -77,7 +75,7 @@ impl Interpreter {
         &mut self,
         block: &mut BlockStmt,
         env: Rc<RefCell<Environment>>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Exception> {
         let previous_env = Rc::clone(&self.environment);
         self.environment = env;
         let mut error = None;
@@ -99,143 +97,6 @@ impl Interpreter {
     }
 }
 
-impl Interpreter {
-    fn handle_addition(
-        left: &Object,
-        right: &Object,
-        operator: &Token,
-    ) -> Result<Object, RuntimeError> {
-        Self::validate_addition_operands(&left, &right, &operator)?;
-
-        match (left, right) {
-            (Object::String(l), Object::String(r)) => return Ok(Object::String(format!("{l}{r}"))),
-            _ => {
-                let result = Self::to_number(left) + Self::to_number(right);
-
-                return Ok(Object::Number(result));
-            }
-        };
-    }
-
-    fn handle_arithmetic(
-        left: &Object,
-        right: &Object,
-        operator: &Token,
-    ) -> Result<Object, RuntimeError> {
-        Self::validate_arithmetic_operands(left, right, operator)?;
-
-        let left_number = Self::to_number(left);
-        let right_number = Self::to_number(right);
-        let value = match operator.token_type {
-            TokenType::Minus => left_number - right_number,
-            TokenType::Star => left_number * right_number,
-            TokenType::Slash => {
-                if right_number == 0.0 {
-                    return Err(RuntimeError::new(
-                        operator.clone(),
-                        "Not divisible by Zero".to_string(),
-                    ));
-                } else {
-                    left_number / right_number
-                }
-            }
-            _ => unreachable!(),
-        };
-
-        Ok(Object::Number(value))
-    }
-
-    fn handle_comparison(
-        left: &Object,
-        right: &Object,
-        operator: &Token,
-    ) -> Result<Object, RuntimeError> {
-        Self::validate_addition_operands(&left, &right, &operator)?;
-
-        let value = match (left, right) {
-            (Object::String(l), Object::String(r)) => match operator.token_type {
-                TokenType::Greater => l > r,
-                TokenType::GreaterEqual => l >= r,
-                TokenType::Less => l < r,
-                TokenType::LessEqual => l <= r,
-                _ => unreachable!(),
-            },
-            _ => {
-                let l = Self::to_number(left);
-                let r = Self::to_number(right);
-
-                match operator.token_type {
-                    TokenType::Greater => l > r,
-                    TokenType::GreaterEqual => l >= r,
-                    TokenType::Less => l < r,
-                    TokenType::LessEqual => l <= r,
-                    _ => unreachable!(),
-                }
-            }
-        };
-
-        Ok(Object::Boolean(value))
-    }
-
-    fn validate_addition_operands(
-        left: &Object,
-        right: &Object,
-        operator: &Token,
-    ) -> Result<(), RuntimeError> {
-        match (left, right) {
-            (Object::Number(_), Object::Number(_))
-            | (Object::Number(_), Object::Boolean(_))
-            | (Object::Boolean(_), Object::Number(_))
-            | (Object::String(_), Object::String(_)) => Ok(()),
-            _ => Err(RuntimeError::new(
-                operator.clone(),
-                "Operands must be (numbers or booleans) or two strings".to_string(),
-            )),
-        }
-    }
-
-    fn validate_arithmetic_operands(
-        left: &Object,
-        right: &Object,
-        operator: &Token,
-    ) -> Result<(), RuntimeError> {
-        match (left, right) {
-            (Object::Number(_), Object::Number(_))
-            | (Object::Number(_), Object::Boolean(_))
-            | (Object::Boolean(_), Object::Number(_)) => Ok(()),
-            _ => Err(RuntimeError::new(
-                operator.clone(),
-                "Operands must be numbers or booleans".to_string(),
-            )),
-        }
-    }
-
-    fn to_number(value: &Object) -> f64 {
-        match value {
-            Object::Number(n) => *n,
-            Object::Boolean(b) => Self::bool_to_number(*b),
-            _ => unreachable!(),
-        }
-    }
-
-    fn bool_to_number(boolean: bool) -> f64 {
-        if boolean {
-            1.0
-        } else {
-            0.0
-        }
-    }
-
-    fn is_truthy(literal: &Object) -> bool {
-        match literal {
-            Object::Undefined => false,
-            Object::Number(number) => *number != 0.0,
-            Object::String(string) => !string.is_empty(),
-            Object::Boolean(boolean) => *boolean,
-        }
-    }
-}
-
 impl ExpressionVisitor for Interpreter {
     type Item = Result<Object, RuntimeError>;
 
@@ -247,7 +108,7 @@ impl ExpressionVisitor for Interpreter {
     fn visit_ternary(&mut self, expr: &mut Ternary) -> Self::Item {
         let condition = self.evaluate(&mut expr.condition)?;
 
-        if Self::is_truthy(&condition) {
+        if operations::is_truthy(&condition) {
             self.evaluate(&mut expr.truth)
         } else {
             self.evaluate(&mut expr.falsy)
@@ -259,14 +120,14 @@ impl ExpressionVisitor for Interpreter {
         let right = self.evaluate(&mut expr.right)?;
 
         match &expr.operator.token_type {
-            TokenType::Plus => Self::handle_addition(&left, &right, &expr.operator),
+            TokenType::Plus => operations::handle_addition(&left, &right, &expr.operator),
             TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                Self::handle_arithmetic(&left, &right, &expr.operator)
+                operations::handle_arithmetic(&left, &right, &expr.operator)
             }
             TokenType::Greater
             | TokenType::GreaterEqual
             | TokenType::Less
-            | TokenType::LessEqual => Self::handle_comparison(&left, &right, &expr.operator),
+            | TokenType::LessEqual => operations::handle_comparison(&left, &right, &expr.operator),
             TokenType::BangEqual => Ok(Object::Boolean(left != right)),
             TokenType::EqualEqual => Ok(Object::Boolean(left == right)),
             _ => unreachable!(),
@@ -276,11 +137,11 @@ impl ExpressionVisitor for Interpreter {
     fn visit_unary(&mut self, expr: &mut Unary) -> Self::Item {
         let literal = self.evaluate(&mut expr.right)?;
         let literal = match expr.operator.token_type {
-            TokenType::Bang => Object::Boolean(!Self::is_truthy(&literal)),
+            TokenType::Bang => Object::Boolean(!operations::is_truthy(&literal)),
             TokenType::Minus => {
                 let literal = match literal {
                     Object::Number(number) => number,
-                    Object::Boolean(boolean) => Self::bool_to_number(boolean),
+                    Object::Boolean(boolean) => operations::bool_to_number(boolean),
                     _ => {
                         return Err(RuntimeError::new(
                             expr.operator.clone(),
@@ -321,7 +182,7 @@ impl ExpressionVisitor for Interpreter {
 
     fn visit_logical(&mut self, expr: &mut Logical) -> Self::Item {
         let left = self.evaluate(&mut expr.left)?;
-        let is_truthy = Self::is_truthy(&left);
+        let is_truthy = operations::is_truthy(&left);
         let value = match expr.operator.token_type {
             TokenType::And => {
                 if is_truthy {
@@ -345,7 +206,7 @@ impl ExpressionVisitor for Interpreter {
 }
 
 impl StmtVisitor for Interpreter {
-    type Item = Result<(), Error>;
+    type Item = Result<(), Exception>;
 
     fn visit_print_stmt(&mut self, stmt: &mut PrintStmt) -> Self::Item {
         let value = self.evaluate_and_map_error(&mut stmt.expression)?;
@@ -360,7 +221,7 @@ impl StmtVisitor for Interpreter {
             Some(expression) => {
                 let value = self.evaluate_and_map_error(expression)?;
                 match value {
-                    Object::Number(_) | Object::Boolean(_) => Self::to_number(&value) as i32,
+                    Object::Number(_) | Object::Boolean(_) => operations::to_number(&value) as i32,
                     _ => {
                         println!("{value}");
 
@@ -412,7 +273,7 @@ impl StmtVisitor for Interpreter {
     fn visit_if_stmt(&mut self, stmt: &mut IfStmt) -> Self::Item {
         let condition = self.evaluate_and_map_error(&mut stmt.condition)?;
 
-        if Self::is_truthy(&condition) {
+        if operations::is_truthy(&condition) {
             self.execute(&mut stmt.truth)?;
         } else if let Some(falsy_stmt) = &mut stmt.falsy {
             self.execute(falsy_stmt)?;
@@ -422,13 +283,13 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_while_stmt(&mut self, stmt: &mut WhileStmt) -> Self::Item {
-        while Self::is_truthy(&self.evaluate_and_map_error(&mut stmt.condition)?) {
+        while operations::is_truthy(&self.evaluate_and_map_error(&mut stmt.condition)?) {
             let result = self.execute(&mut stmt.body);
 
             if let Err(e) = &result {
                 match e {
-                    Error::BreakException => break,
-                    Error::ContinueException => continue,
+                    Exception::BreakException => break,
+                    Exception::ContinueException => continue,
                     _ => result?,
                 }
             }
@@ -442,10 +303,10 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_continue_stmt(&mut self) -> Self::Item {
-        Err(Error::ContinueException)
+        Err(Exception::ContinueException)
     }
 
     fn visit_break_stmt(&mut self) -> Self::Item {
-        Err(Error::BreakException)
+        Err(Exception::BreakException)
     }
 }

@@ -15,13 +15,13 @@ use scanner::{token::Token, token_type::TokenType, Scanner};
 use visitor::interpreter::{Interpreter, RuntimeError};
 
 #[allow(dead_code)]
-pub struct Typhoon {
+pub struct Lib {
     had_error: bool,
     had_runtime_error: bool,
     version: &'static str,
 }
 
-impl Typhoon {
+impl Lib {
     pub fn new() -> Self {
         Self {
             had_error: false,

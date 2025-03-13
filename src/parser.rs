@@ -18,7 +18,7 @@ use crate::{
         while_stmt::WhileStmt,
         Stmt,
     },
-    Typhoon,
+    Lib,
 };
 
 pub struct Counter {
@@ -47,29 +47,21 @@ impl Parser {
         Self { tokens }
     }
 
-    pub fn parse(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Vec<Stmt>, ParseError> {
+    pub fn parse(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Vec<Stmt>, ParseError> {
         let mut statements = vec![];
 
         while !self.is_at_end(counter) {
-            statements.push(self.declaration_stmt(counter, typhoon));
+            statements.push(self.declaration_stmt(counter, lib));
         }
 
         statements.into_iter().collect()
     }
 
-    fn declaration_stmt(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Stmt, ParseError> {
+    fn declaration_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
         let stmt = if self.matches(&[TokenType::Var], counter) {
-            self.variable_stmt(counter, typhoon)
+            self.variable_stmt(counter, lib)
         } else {
-            self.stmt(counter, typhoon)
+            self.stmt(counter, lib)
         };
 
         if let Err(_) = stmt {
@@ -79,22 +71,14 @@ impl Parser {
         stmt
     }
 
-    fn variable_stmt(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Stmt, ParseError> {
+    fn variable_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
         let mut variables = vec![];
-        let mut parse_variable = |counter: &mut Counter, typhoon: &mut Typhoon| {
-            let name = self.consume(
-                &TokenType::Identifier,
-                counter,
-                "Expect an identifier",
-                typhoon,
-            )?;
+        let mut parse_variable = |counter: &mut Counter, lib: &mut Lib| {
+            let name =
+                self.consume(&TokenType::Identifier, counter, "Expect an identifier", lib)?;
 
             let initializer = if self.matches(&[TokenType::Equal], counter) {
-                Some(self.assignment(counter, typhoon)?)
+                Some(self.assignment(counter, lib)?)
             } else {
                 None
             };
@@ -104,31 +88,31 @@ impl Parser {
             Ok(())
         };
 
-        parse_variable(counter, typhoon)?;
+        parse_variable(counter, lib)?;
 
         while self.matches(&[TokenType::Comma], counter) {
-            parse_variable(counter, typhoon)?;
+            parse_variable(counter, lib)?;
         }
 
-        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", lib)?;
 
         Ok(Stmt::VariableStmt(Box::new(VariableStmt { variables })))
     }
 
-    fn stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+    fn stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
         if self.matches(&[TokenType::If], counter) {
-            self.if_stmt(counter, typhoon)
+            self.if_stmt(counter, lib)
         } else if self.matches(&[TokenType::While], counter) {
-            self.while_stmt(counter, typhoon)
+            self.while_stmt(counter, lib)
         } else if self.matches(&[TokenType::For], counter) {
-            self.for_stmt(counter, typhoon)
+            self.for_stmt(counter, lib)
         } else if self.matches(&[TokenType::Print], counter) {
-            self.print_stmt(counter, typhoon)
+            self.print_stmt(counter, lib)
         } else if self.matches(&[TokenType::Exit], counter) {
-            self.exit_stmt(counter, typhoon)
+            self.exit_stmt(counter, lib)
         } else if self.matches(&[TokenType::LeftBraces], counter) {
             Ok(Stmt::BlockStmt(Box::new(BlockStmt {
-                stmts: self.block_stmt(counter, typhoon)?,
+                stmts: self.block_stmt(counter, lib)?,
             })))
         } else if self.matches(&[TokenType::SemiColon], counter) {
             Ok(Stmt::EmptyStmt)
@@ -137,11 +121,11 @@ impl Parser {
                 return Err(Self::error(
                     self.previous(counter),
                     "Break can only be used in a loop",
-                    typhoon,
+                    lib,
                 ));
             }
 
-            self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+            self.consume(&TokenType::SemiColon, counter, "Expect a ';'", lib)?;
 
             Ok(Stmt::BreakStmt)
         } else if self.matches(&[TokenType::Continue], counter) {
@@ -149,38 +133,28 @@ impl Parser {
                 return Err(Self::error(
                     self.previous(counter),
                     "Continue can only be used in a loop",
-                    typhoon,
+                    lib,
                 ));
             }
 
-            self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+            self.consume(&TokenType::SemiColon, counter, "Expect a ';'", lib)?;
 
             Ok(Stmt::ContinueStmt)
         } else {
-            self.expr_stmt(counter, typhoon)
+            self.expr_stmt(counter, lib)
         }
     }
 
-    fn if_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
-        self.consume(
-            &TokenType::LeftParenthesis,
-            counter,
-            "Expect a '('",
-            typhoon,
-        )?;
+    fn if_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
+        self.consume(&TokenType::LeftParenthesis, counter, "Expect a '('", lib)?;
 
-        let condition = self.expression(counter, typhoon)?;
+        let condition = self.expression(counter, lib)?;
 
-        self.consume(
-            &TokenType::RightParenthesis,
-            counter,
-            "Expect a ')'",
-            typhoon,
-        )?;
+        self.consume(&TokenType::RightParenthesis, counter, "Expect a ')'", lib)?;
 
-        let truth = self.stmt(counter, typhoon)?;
+        let truth = self.stmt(counter, lib)?;
         let falsy = if self.matches(&[TokenType::Else], counter) {
-            Some(self.stmt(counter, typhoon)?)
+            Some(self.stmt(counter, lib)?)
         } else {
             None
         };
@@ -192,44 +166,44 @@ impl Parser {
         })))
     }
 
-    fn while_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+    fn while_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
         self.consume(
             &TokenType::LeftParenthesis,
             counter,
             "Expect a '(' after while",
-            typhoon,
+            lib,
         )?;
 
-        let condition = self.expression(counter, typhoon)?;
+        let condition = self.expression(counter, lib)?;
 
         self.consume(
             &TokenType::RightParenthesis,
             counter,
             "Expect a ')' before while body",
-            typhoon,
+            lib,
         )?;
 
         counter.loop_depth += 1;
-        let body = self.stmt(counter, typhoon)?;
+        let body = self.stmt(counter, lib)?;
         counter.loop_depth -= 1;
 
         Ok(Stmt::WhileStmt(Box::new(WhileStmt { condition, body })))
     }
 
-    fn for_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+    fn for_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
         self.consume(
             &TokenType::LeftParenthesis,
             counter,
             "Expect a '(' after for",
-            typhoon,
+            lib,
         )?;
 
         let initializer = if self.matches(&[TokenType::SemiColon], counter) {
             None
         } else if self.matches(&[TokenType::Var], counter) {
-            Some(self.variable_stmt(counter, typhoon)?)
+            Some(self.variable_stmt(counter, lib)?)
         } else {
-            Some(self.expr_stmt(counter, typhoon)?)
+            Some(self.expr_stmt(counter, lib)?)
         };
 
         let condition = if self.check(&TokenType::SemiColon, counter) {
@@ -237,31 +211,31 @@ impl Parser {
                 value: Object::Boolean(true),
             }))
         } else {
-            self.expression(counter, typhoon)?
+            self.expression(counter, lib)?
         };
 
         self.consume(
             &TokenType::SemiColon,
             counter,
             "Expect a ';' after conditional expression",
-            typhoon,
+            lib,
         )?;
 
         let increment = if self.check(&TokenType::RightParenthesis, counter) {
             None
         } else {
-            Some(self.expression(counter, typhoon)?)
+            Some(self.expression(counter, lib)?)
         };
 
         self.consume(
             &TokenType::RightParenthesis,
             counter,
             "Expect a ')' before for body",
-            typhoon,
+            lib,
         )?;
 
         counter.loop_depth += 1;
-        let mut body = self.stmt(counter, typhoon)?;
+        let mut body = self.stmt(counter, lib)?;
         counter.loop_depth -= 1;
 
         if let Some(expression) = increment {
@@ -284,88 +258,72 @@ impl Parser {
         Ok(body)
     }
 
-    fn print_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
-        let expression = self.expression(counter, typhoon)?;
+    fn print_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
+        let expression = self.expression(counter, lib)?;
 
-        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", lib)?;
 
         Ok(Stmt::PrintStmt(Box::new(PrintStmt { expression })))
     }
 
-    fn exit_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
+    fn exit_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
         if self.matches(&[TokenType::SemiColon], counter) {
             return Ok(Stmt::ExitStmt(Box::new(ExitStmt { expression: None })));
         }
 
-        let expression = self.expression(counter, typhoon)?;
+        let expression = self.expression(counter, lib)?;
 
-        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", lib)?;
 
         Ok(Stmt::ExitStmt(Box::new(ExitStmt {
             expression: Some(expression),
         })))
     }
 
-    fn block_stmt(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Vec<Stmt>, ParseError> {
+    fn block_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Vec<Stmt>, ParseError> {
         let mut stmts = vec![];
 
         while !self.check(&TokenType::RightBraces, counter) && !self.is_at_end(counter) {
-            stmts.push(self.declaration_stmt(counter, typhoon)?);
+            stmts.push(self.declaration_stmt(counter, lib)?);
         }
 
-        self.consume(&TokenType::RightBraces, counter, "Expect a '}'", typhoon)?;
+        self.consume(&TokenType::RightBraces, counter, "Expect a '}'", lib)?;
 
         Ok(stmts)
     }
 
-    fn expr_stmt(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Stmt, ParseError> {
-        let expression = self.expression(counter, typhoon)?;
+    fn expr_stmt(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Stmt, ParseError> {
+        let expression = self.expression(counter, lib)?;
 
-        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", typhoon)?;
+        self.consume(&TokenType::SemiColon, counter, "Expect a ';'", lib)?;
 
         Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt {
             expression,
         })))
     }
 
-    fn expression(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        return self.comma(counter, typhoon);
+    fn expression(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        return self.comma(counter, lib);
     }
 
-    fn comma(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut left = self.assignment(counter, typhoon)?;
+    fn comma(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.assignment(counter, lib)?;
 
         while self.matches(&[TokenType::Comma], counter) {
-            let right = self.assignment(counter, typhoon)?;
+            let right = self.assignment(counter, lib)?;
             left = Expression::Comma(Box::new(Comma { left, right }))
         }
 
         Ok(left)
     }
 
-    fn assignment(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let variable = self.ternary(counter, typhoon)?;
+    fn assignment(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let variable = self.ternary(counter, lib)?;
 
         if self.matches(&[TokenType::Equal], counter) {
             match &variable {
                 Expression::Variable(variable) => {
-                    let expression = self.assignment(counter, typhoon)?;
+                    let expression = self.assignment(counter, lib)?;
 
                     Ok(Expression::Assignment(Box::new(Assignment {
                         name: variable.name,
@@ -375,7 +333,7 @@ impl Parser {
                 _ => Err(Self::error(
                     self.previous(counter),
                     "Invalid left-hand side in assignment",
-                    typhoon,
+                    lib,
                 )),
             }
         } else {
@@ -383,19 +341,15 @@ impl Parser {
         }
     }
 
-    pub fn ternary(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut condition = self.or(counter, typhoon)?;
+    pub fn ternary(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut condition = self.or(counter, lib)?;
 
         if self.matches(&[TokenType::Question], counter) {
-            let truth = self.expression(counter, typhoon)?;
+            let truth = self.expression(counter, lib)?;
 
-            self.consume(&TokenType::Colon, counter, "Expect a ':'", typhoon)?;
+            self.consume(&TokenType::Colon, counter, "Expect a ':'", lib)?;
 
-            let falsy = self.expression(counter, typhoon)?;
+            let falsy = self.expression(counter, lib)?;
 
             condition = Expression::Ternary(Box::new(Ternary {
                 condition,
@@ -407,16 +361,12 @@ impl Parser {
         Ok(condition)
     }
 
-    pub fn or(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut left = self.and(counter, typhoon)?;
+    pub fn or(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.and(counter, lib)?;
 
         while self.matches(&[TokenType::Or], counter) {
             let operator = self.previous(counter);
-            let right = self.and(counter, typhoon)?;
+            let right = self.and(counter, lib)?;
             left = Expression::Logical(Box::new(Logical {
                 operator,
                 left,
@@ -427,16 +377,12 @@ impl Parser {
         Ok(left)
     }
 
-    pub fn and(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut left = self.equality(counter, typhoon)?;
+    pub fn and(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.equality(counter, lib)?;
 
         while self.matches(&[TokenType::And], counter) {
             let operator = self.previous(counter);
-            let right = self.equality(counter, typhoon)?;
+            let right = self.equality(counter, lib)?;
             left = Expression::Logical(Box::new(Logical {
                 operator,
                 left,
@@ -447,16 +393,12 @@ impl Parser {
         Ok(left)
     }
 
-    fn equality(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut left = self.comparison(counter, typhoon)?;
+    fn equality(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.comparison(counter, lib)?;
 
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual], counter) {
             let operator = self.previous(counter);
-            let right = self.comparison(counter, typhoon)?;
+            let right = self.comparison(counter, lib)?;
             left = Expression::Binary(Box::new(Binary {
                 left,
                 operator,
@@ -467,12 +409,8 @@ impl Parser {
         Ok(left)
     }
 
-    fn comparison(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut left = self.term(counter, typhoon)?;
+    fn comparison(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.term(counter, lib)?;
 
         while self.matches(
             &[
@@ -484,7 +422,7 @@ impl Parser {
             counter,
         ) {
             let operator = self.previous(counter);
-            let right: Expression<'_> = self.term(counter, typhoon)?;
+            let right: Expression<'_> = self.term(counter, lib)?;
             left = Expression::Binary(Box::new(Binary {
                 left,
                 operator,
@@ -495,12 +433,12 @@ impl Parser {
         Ok(left)
     }
 
-    fn term(&self, counter: &mut Counter, typhoon: &mut Typhoon) -> Result<Expression, ParseError> {
-        let mut left = self.factor(counter, typhoon)?;
+    fn term(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.factor(counter, lib)?;
 
         while self.matches(&[TokenType::Minus, TokenType::Plus], counter) {
             let operator = self.previous(counter);
-            let right = self.factor(counter, typhoon)?;
+            let right = self.factor(counter, lib)?;
             left = Expression::Binary(Box::new(Binary {
                 left,
                 operator,
@@ -511,16 +449,12 @@ impl Parser {
         Ok(left)
     }
 
-    fn factor(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
-        let mut left = self.unary(counter, typhoon)?;
+    fn factor(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
+        let mut left = self.unary(counter, lib)?;
 
         while self.matches(&[TokenType::Star, TokenType::Slash], counter) {
             let operator = self.previous(counter);
-            let right = self.unary(counter, typhoon)?;
+            let right = self.unary(counter, lib)?;
             left = Expression::Binary(Box::new(Binary {
                 left,
                 operator,
@@ -531,27 +465,19 @@ impl Parser {
         Ok(left)
     }
 
-    fn unary(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
+    fn unary(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
         if self.matches(&[TokenType::Bang, TokenType::Minus], counter) {
             let operator = self.previous(counter);
-            let right = self.unary(counter, typhoon)?;
+            let right = self.unary(counter, lib)?;
             let expression = Expression::Unary(Box::new(Unary { operator, right }));
 
             Ok(expression)
         } else {
-            self.primary(counter, typhoon)
+            self.primary(counter, lib)
         }
     }
 
-    fn primary(
-        &self,
-        counter: &mut Counter,
-        typhoon: &mut Typhoon,
-    ) -> Result<Expression, ParseError> {
+    fn primary(&self, counter: &mut Counter, lib: &mut Lib) -> Result<Expression, ParseError> {
         if self.matches(&[TokenType::NumberLiteral], counter) {
             let number = self.previous(counter).literal.as_ref().unwrap();
 
@@ -597,14 +523,9 @@ impl Parser {
         }
 
         if self.matches(&[TokenType::LeftParenthesis], counter) {
-            let expression = self.expression(counter, typhoon)?;
+            let expression = self.expression(counter, lib)?;
 
-            self.consume(
-                &TokenType::RightParenthesis,
-                counter,
-                "Expect a ')'",
-                typhoon,
-            )?;
+            self.consume(&TokenType::RightParenthesis, counter, "Expect a ')'", lib)?;
 
             return Ok(Expression::Grouping(Box::new(Grouping { expression })));
         }
@@ -626,17 +547,13 @@ impl Parser {
             Self::error(
                 self.peek(counter),
                 "Binary operator required left hand expression",
-                typhoon,
+                lib,
             );
 
-            return self.expression(counter, typhoon);
+            return self.expression(counter, lib);
         }
 
-        Err(Self::error(
-            self.peek(counter),
-            "Expect an expression",
-            typhoon,
-        ))
+        Err(Self::error(self.peek(counter), "Expect an expression", lib))
     }
 
     fn matches(&self, tokens: &[TokenType], counter: &mut Counter) -> bool {
@@ -656,13 +573,13 @@ impl Parser {
         token: &TokenType,
         counter: &mut Counter,
         message: &str,
-        typhoon: &mut Typhoon,
+        lib: &mut Lib,
     ) -> Result<&Token, ParseError> {
         if self.check(token, counter) {
             return Ok(self.advance(counter));
         }
 
-        Err(Self::error(self.peek(counter), message, typhoon))
+        Err(Self::error(self.peek(counter), message, lib))
     }
 
     fn check(&self, token: &TokenType, counter: &mut Counter) -> bool {
@@ -693,13 +610,14 @@ impl Parser {
         &self.tokens[counter.current - 1]
     }
 
-    fn error<'b>(token: &'b Token, message: &str, typhoon: &mut Typhoon) -> ParseError {
-        typhoon.error_two(token, message);
+    fn error<'b>(token: &'b Token, message: &str, lib: &mut Lib) -> ParseError {
+        lib.error_two(token, message);
 
         ParseError
     }
 
     fn synchronize(&self, counter: &mut Counter) {
+        counter.loop_depth = 0;
         self.advance(counter);
 
         while !self.is_at_end(counter) {

@@ -1,7 +1,7 @@
 pub mod token;
 pub mod token_type;
 
-use crate::Typhoon;
+use crate::Lib;
 use phf::phf_map;
 use token::{LiteralType, Token};
 use token_type::TokenType;
@@ -47,18 +47,18 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(mut self, typhoon: &mut Typhoon) -> Vec<Token> {
+    pub fn scan_tokens(mut self, lib: &mut Lib) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
 
-            self.scan_token(typhoon);
+            self.scan_token(lib);
         }
 
         self.add_token(TokenType::Eof);
         self.tokens
     }
 
-    fn scan_token(&mut self, typhoon: &mut Typhoon) {
+    fn scan_token(&mut self, lib: &mut Lib) {
         let c = self.advance();
 
         if c == '(' {
@@ -114,22 +114,22 @@ impl Scanner {
             };
             self.add_token(token_type);
         } else if c == '/' {
-            self.slash(typhoon)
+            self.slash(lib)
         } else if c == '\n' {
             self.line += 1;
         } else if c == '"' {
-            self.string_literal(typhoon);
+            self.string_literal(lib);
         } else if c.is_digit(10) {
             self.number_literal();
         } else if Self::is_alphabetic(c) {
             self.identifier();
         } else if c == ' ' || c == '\r' || c == '\t' {
         } else {
-            typhoon.error_one(self.line, "Unexpected character");
+            lib.error_one(self.line, "Unexpected character");
         }
     }
 
-    fn slash(&mut self, typhoon: &mut Typhoon) {
+    fn slash(&mut self, lib: &mut Lib) {
         match self.peek() {
             '/' => {
                 while self.peek() != '\n' && !self.is_at_end() {
@@ -154,7 +154,7 @@ impl Scanner {
                     self.advance();
                 }
 
-                typhoon.error_one(self.line, "Expect a '*/'");
+                lib.error_one(self.line, "Expect a '*/'");
             }
             _ => {
                 self.add_token(TokenType::Slash);
@@ -162,7 +162,7 @@ impl Scanner {
         }
     }
 
-    fn string_literal(&mut self, typhoon: &mut Typhoon) {
+    fn string_literal(&mut self, lib: &mut Lib) {
         while !self.is_at_end() {
             match self.peek() {
                 '"' => {
@@ -186,7 +186,7 @@ impl Scanner {
             }
         }
 
-        typhoon.error_one(self.line, "Unterminated string literal");
+        lib.error_one(self.line, "Unterminated string literal");
     }
 
     fn number_literal(&mut self) {

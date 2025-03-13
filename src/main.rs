@@ -1,5 +1,5 @@
 use clap::{Arg, Command};
-use typhoon::Typhoon;
+use typhoon::Lib;
 
 fn main() {
     let matches = Command::new("MyApp")
@@ -17,7 +17,7 @@ fn main() {
         .map(|s| s.to_string())
         .collect();
 
-    let mut compiler = Typhoon::new();
+    let mut compiler = Lib::new();
 
     if filenames.is_empty() {
         compiler.run_prompt();
