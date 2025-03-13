@@ -2,11 +2,15 @@ pub mod operations;
 
 use std::{cell::RefCell, process::exit, rc::Rc};
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::{
+    callee::Callee,
     environment::Environment,
     expression::{
-        assignment::Assignment, binary::Binary, comma::Comma, grouping::Grouping, literal::Literal,
-        logical::Logical, ternary::Ternary, unary::Unary, variable::Variable, Expression,
+        assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
+        literal::Literal, logical::Logical, ternary::Ternary, unary::Unary, variable::Variable,
+        Expression,
     },
     object::Object,
     scanner::{token::Token, token_type::TokenType},
@@ -41,18 +45,44 @@ pub enum Exception {
     ContinueException,
 }
 
+#[derive(Clone)]
 pub struct Interpreter {
+    globals: Rc<RefCell<Environment>>,
     environment: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
-    pub fn interpret(stmts: &mut Vec<Stmt>, lib: &mut Lib, environment: Rc<RefCell<Environment>>) {
-        let mut interpreter = Self { environment };
+    pub fn new() -> Self {
+        let globals = Rc::new(RefCell::new(Environment::new(None)));
 
+        globals.borrow_mut().define(
+            "clock".to_string(),
+            Object::Callee(Callee {
+                arity: Rc::new(|| 0),
+                call: Rc::new(|_, _| {
+                    let now = SystemTime::now();
+                    let millis = now
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Time went backwards")
+                        .as_millis() as f64;
+
+                    Ok(Object::Number(millis))
+                }),
+                to_string: Some(Rc::new(|| "[Native Function]".to_string())),
+            }),
+        );
+
+        Self {
+            environment: Rc::clone(&globals),
+            globals,
+        }
+    }
+
+    pub fn interpret(&mut self, stmts: &mut Vec<Stmt>) {
         for stmt in stmts {
-            if let Err(e) = interpreter.execute(stmt) {
+            if let Err(e) = self.execute(stmt) {
                 match e {
-                    Exception::RuntimeError(runtime_error) => lib.runtime_error(&runtime_error),
+                    Exception::RuntimeError(runtime_error) => Lib::runtime_error(&runtime_error),
                     _ => unreachable!(),
                 };
             }
@@ -202,6 +232,34 @@ impl ExpressionVisitor for Interpreter {
         };
 
         Ok(value)
+    }
+
+    fn visit_call(&mut self, expr: &mut Call) -> Self::Item {
+        let callee = self.evaluate(&mut expr.callee)?;
+        let arguments = expr
+            .arguments
+            .iter_mut()
+            .map(|f| self.evaluate(f))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        match callee {
+            Object::Callee(c) => {
+                let arity = (c.arity)();
+
+                if arguments.len() < arity {
+                    Err(RuntimeError {
+                        message: format!("Expected [{arity}] arguments got [{}]", arguments.len()),
+                        token: expr.paren.clone(),
+                    })
+                } else {
+                    (c.call)(self.clone(), arguments)
+                }
+            }
+            _ => Err(RuntimeError {
+                message: "Can only call functions and classes".to_string(),
+                token: expr.paren.clone(),
+            }),
+        }
     }
 }
 

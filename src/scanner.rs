@@ -47,18 +47,18 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(mut self, lib: &mut Lib) -> Vec<Token> {
+    pub fn scan_tokens(mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
 
-            self.scan_token(lib);
+            self.scan_token();
         }
 
         self.add_token(TokenType::Eof);
         self.tokens
     }
 
-    fn scan_token(&mut self, lib: &mut Lib) {
+    fn scan_token(&mut self) {
         let c = self.advance();
 
         if c == '(' {
@@ -114,22 +114,22 @@ impl Scanner {
             };
             self.add_token(token_type);
         } else if c == '/' {
-            self.slash(lib)
+            self.slash()
         } else if c == '\n' {
             self.line += 1;
         } else if c == '"' {
-            self.string_literal(lib);
+            self.string_literal();
         } else if c.is_digit(10) {
             self.number_literal();
         } else if Self::is_alphabetic(c) {
             self.identifier();
         } else if c == ' ' || c == '\r' || c == '\t' {
         } else {
-            lib.error_one(self.line, "Unexpected character");
+            Lib::error_one(self.line, "Unexpected character");
         }
     }
 
-    fn slash(&mut self, lib: &mut Lib) {
+    fn slash(&mut self) {
         match self.peek() {
             '/' => {
                 while self.peek() != '\n' && !self.is_at_end() {
@@ -154,7 +154,7 @@ impl Scanner {
                     self.advance();
                 }
 
-                lib.error_one(self.line, "Expect a '*/'");
+                Lib::error_one(self.line, "Expect a '*/'");
             }
             _ => {
                 self.add_token(TokenType::Slash);
@@ -162,7 +162,7 @@ impl Scanner {
         }
     }
 
-    fn string_literal(&mut self, lib: &mut Lib) {
+    fn string_literal(&mut self) {
         while !self.is_at_end() {
             match self.peek() {
                 '"' => {
@@ -186,7 +186,7 @@ impl Scanner {
             }
         }
 
-        lib.error_one(self.line, "Unterminated string literal");
+        Lib::error_one(self.line, "Unterminated string literal");
     }
 
     fn number_literal(&mut self) {

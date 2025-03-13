@@ -1,3 +1,4 @@
+pub mod callee;
 pub mod environment;
 pub mod expression;
 pub mod object;
@@ -6,27 +7,24 @@ pub mod scanner;
 pub mod stmt;
 pub mod visitor;
 
-use std::{cell::RefCell, rc::Rc};
-
-use environment::Environment;
-use parser::{Counter, Parser};
+use parser::Parser;
 use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
 use visitor::interpreter::{Interpreter, RuntimeError};
 
 #[allow(dead_code)]
 pub struct Lib {
-    had_error: bool,
-    had_runtime_error: bool,
-    version: &'static str,
+    interpreter: Interpreter,
 }
+
+static mut HAD_ERROR: bool = false;
+static mut HAD_RUNTIME_ERROR: bool = false;
+static VERSION: &'static str = "Beta 0.0.1";
 
 impl Lib {
     pub fn new() -> Self {
         Self {
-            had_error: false,
-            had_runtime_error: false,
-            version: "Beta 0.0.1",
+            interpreter: Interpreter::new(),
         }
     }
 
@@ -35,62 +33,68 @@ impl Lib {
     }
 
     pub fn run_prompt(&mut self) {
-        println!("Typhoon {}", self.version);
+        println!("Typhoon {}", VERSION);
 
         let mut rl = DefaultEditor::new().expect("failed to create editor");
-        let global_env = Rc::new(RefCell::new(Environment::new(None)));
 
         loop {
             let input = rl.readline("> ").expect("input is read correctly");
             rl.add_history_entry(&input)
                 .expect("input added to history");
-            self.run(input, Rc::clone(&global_env));
-            self.had_error = false;
+            self.run(input);
+
+            unsafe {
+                HAD_ERROR = false;
+            }
         }
     }
 
-    fn run(&mut self, source: String, global_env: Rc<RefCell<Environment>>) {
+    fn run(&mut self, source: String) {
         let scanner = Scanner::new(source);
-        let tokens = scanner.scan_tokens(self);
+        let tokens = scanner.scan_tokens();
 
-        if self.had_error {
+        if unsafe { HAD_ERROR } {
             return;
         }
 
         let parser = Parser::new(tokens);
-        let mut counter = Counter::new();
-        let statements = parser.parse(&mut counter, self);
+        let statements = parser.parse();
 
-        if statements.is_err() {
+        if unsafe { HAD_ERROR } {
             return;
         }
 
         let mut statements = statements.expect("got valid statements");
 
-        Interpreter::interpret(&mut statements, self, global_env);
+        self.interpreter.interpret(&mut statements);
     }
 
-    pub fn error_one(&mut self, line: usize, message: &str) {
-        self.report(line, "", message);
+    pub fn error_one(line: usize, message: &str) {
+        Lib::report(line, "", message);
     }
 
-    pub fn error_two<'a>(&mut self, token: &'a Token, message: &str) {
+    pub fn error_two<'a>(token: &'a Token, message: &str) {
         if token.token_type == TokenType::Eof {
-            self.report(token.line, "at end", message);
+            Lib::report(token.line, "at end", message);
         } else {
             let wheres = format!("at '{}'", token.lexeme);
-            self.report(token.line, &wheres, message);
+            Lib::report(token.line, &wheres, message);
         }
     }
 
-    pub fn runtime_error(&mut self, runtime_error: &RuntimeError) {
+    pub fn runtime_error(runtime_error: &RuntimeError) {
         println!("[{}] {}", runtime_error.token.line, runtime_error.message);
 
-        self.had_error = true;
+        unsafe {
+            HAD_RUNTIME_ERROR = true;
+        }
     }
 
-    fn report(&mut self, line: usize, wheres: &str, message: &str) {
+    fn report(line: usize, wheres: &str, message: &str) {
         println!("[{line}] Error {wheres}: {message}");
-        self.had_error = true;
+
+        unsafe {
+            HAD_ERROR = true;
+        }
     }
 }

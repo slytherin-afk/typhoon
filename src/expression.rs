@@ -1,5 +1,6 @@
 pub mod assignment;
 pub mod binary;
+pub mod call;
 pub mod comma;
 pub mod grouping;
 pub mod literal;
@@ -10,6 +11,7 @@ pub mod variable;
 
 use assignment::Assignment;
 use binary::Binary;
+use call::Call;
 use comma::Comma;
 use grouping::Grouping;
 use literal::Literal;
@@ -28,4 +30,5 @@ pub enum Expression<'a> {
     Variable(Box<Variable<'a>>),
     Assignment(Box<Assignment<'a>>),
     Logical(Box<Logical<'a>>),
+    Call(Box<Call<'a>>),
 }
