@@ -16,8 +16,8 @@ impl Callable for Function {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        arguments: Vec<Rc<Object>>,
-    ) -> Result<Rc<Object>, RuntimeError> {
+        arguments: Vec<Object>,
+    ) -> Result<Object, RuntimeError> {
         let mut env = Environment::new(Some(Rc::clone(&interpreter.globals)));
 
         for (i, arg) in arguments.into_iter().enumerate() {
@@ -34,10 +34,10 @@ impl Callable for Function {
                 }
             })?;
 
-        Ok(Rc::new(Object::Undefined))
+        Ok(Object::Undefined)
     }
 
     fn to_string(&self) -> String {
-        format!("[Function {}]", self.declaration.name.lexeme)
+        format!("[Function: {}]", self.declaration.name.lexeme)
     }
 }
