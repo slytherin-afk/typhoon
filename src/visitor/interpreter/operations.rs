@@ -1,11 +1,10 @@
 use std::rc::Rc;
 
+use super::RuntimeError;
 use crate::{
     object::Object,
     scanner::{token::Token, token_type::TokenType},
 };
-
-use super::RuntimeError;
 
 pub fn handle_addition(
     left: &Object,

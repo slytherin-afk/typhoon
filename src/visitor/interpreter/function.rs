@@ -1,8 +1,6 @@
-use std::rc::Rc;
-
-use crate::{environment::Environment, object::Object, stmt::function_stmt::FunctionStmt};
-
 use super::{callable::Callable, Exception, Interpreter, RuntimeError};
+use crate::{environment::Environment, object::Object, stmt::function_stmt::FunctionStmt};
+use std::rc::Rc;
 
 pub struct Function {
     pub declaration: FunctionStmt,

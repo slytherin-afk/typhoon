@@ -3,11 +3,7 @@ pub mod function;
 pub mod globals;
 pub mod operations;
 
-use std::{cell::RefCell, process::exit, rc::Rc};
-
-use function::Function;
-use globals::Clock;
-
+use super::{ExpressionVisitor, StmtVisitor};
 use crate::{
     environment::Environment,
     expression::{
@@ -24,8 +20,9 @@ use crate::{
     },
     Lib,
 };
-
-use super::{ExpressionVisitor, StmtVisitor};
+use function::Function;
+use globals::Clock;
+use std::{cell::RefCell, process::exit, rc::Rc};
 
 pub struct RuntimeError {
     token: Token,

@@ -1,8 +1,6 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::object::Object;
-
 use super::{callable::Callable, Interpreter, RuntimeError};
+use crate::object::Object;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Clock;
 
