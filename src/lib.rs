@@ -51,6 +51,10 @@ impl Lib {
         let scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens();
 
+        // for t in &tokens {
+        //     println!("{} {}", t.line, t.lexeme);
+        // }
+
         if unsafe { HAD_ERROR } {
             return;
         }
@@ -61,8 +65,6 @@ impl Lib {
         if unsafe { HAD_ERROR } {
             return;
         }
-
-        let statements = statements.expect("got valid statements");
 
         self.interpreter.interpret(statements);
     }

@@ -28,7 +28,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     loop_depth: usize,
-    in_function: bool,
+    function_depth: usize,
 }
 
 #[derive(Debug)]
@@ -40,21 +40,23 @@ impl Parser {
             tokens,
             current: 0,
             loop_depth: 0,
-            in_function: false,
+            function_depth: 0,
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    pub fn parse(&mut self) -> Vec<Stmt> {
         let mut statements = vec![];
 
         while !self.is_at_end() {
-            statements.push(self.declaration_stmt());
+            if let Some(stmt) = self.declaration_stmt() {
+                statements.push(stmt)
+            };
         }
 
-        statements.into_iter().collect()
+        statements
     }
 
-    fn declaration_stmt(&mut self) -> Result<Stmt, ParseError> {
+    fn declaration_stmt(&mut self) -> Option<Stmt> {
         let stmt = if self.matches(&[TokenType::Var]) {
             self.variable_stmt()
         } else {
@@ -65,7 +67,7 @@ impl Parser {
             self.synchronize();
         }
 
-        stmt
+        stmt.ok()
     }
 
     fn variable_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -123,22 +125,8 @@ impl Parser {
             })))
         } else if self.matches(&[TokenType::SemiColon]) {
             Ok(Stmt::EmptyStmt)
-        } else if self.matches(&[TokenType::Break]) {
-            if self.loop_depth == 0 || self.in_function {
-                Self::error(self.previous(), "Break can only be used in a loop");
-            }
-
-            self.consume(&TokenType::SemiColon, "Expect a ';' at the end of break")?;
-
-            Ok(Stmt::BreakStmt)
-        } else if self.matches(&[TokenType::Continue]) {
-            if self.loop_depth == 0 || self.in_function {
-                Self::error(self.previous(), "Continue can only be used in a loop");
-            }
-
-            self.consume(&TokenType::SemiColon, "Expect a ';' at the of continue")?;
-
-            Ok(Stmt::ContinueStmt)
+        } else if self.matches(&[TokenType::Break, TokenType::Continue]) {
+            self.loop_control()
         } else {
             self.expr_stmt()
         }
@@ -148,7 +136,9 @@ impl Parser {
         let mut stmts = vec![];
 
         while !self.check(&TokenType::RightBraces) && !self.is_at_end() {
-            stmts.push(self.declaration_stmt()?);
+            if let Some(stmt) = self.declaration_stmt() {
+                stmts.push(stmt);
+            }
         }
 
         self.consume(&TokenType::RightBraces, "Expect a '}' at the end of block")?;
@@ -178,7 +168,7 @@ impl Parser {
     }
 
     fn function_stmt(&mut self, kind: &str) -> Result<Stmt, ParseError> {
-        self.in_function = true;
+        self.function_depth += 1;
 
         let name = self
             .consume(&TokenType::Identifier, &format!("Expect {kind} name"))?
@@ -224,6 +214,8 @@ impl Parser {
 
         let body = self.block_stmt()?;
 
+        self.function_depth -= 1;
+
         Ok(Stmt::FunctionStmt(Box::new(FunctionStmt {
             name,
             params,
@@ -232,6 +224,13 @@ impl Parser {
     }
 
     fn return_stmt(&mut self) -> Result<Stmt, ParseError> {
+        if self.function_depth == 0 {
+            return Err(Self::error(
+                self.previous(),
+                "Cannot use return outside a function",
+            ));
+        }
+
         let keyword = self.previous().clone();
         let value = if !self.check(&TokenType::SemiColon) {
             Some(self.expression()?)
@@ -248,7 +247,7 @@ impl Parser {
     }
 
     fn while_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.in_function = false;
+        self.loop_depth += 1;
 
         self.consume(&TokenType::LeftParenthesis, "Expect a '(' after while")?;
 
@@ -259,7 +258,6 @@ impl Parser {
             "Expect a ')' before while body",
         )?;
 
-        self.loop_depth += 1;
         let body = self.stmt()?;
         self.loop_depth -= 1;
 
@@ -267,7 +265,7 @@ impl Parser {
     }
 
     fn for_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.in_function = false;
+        self.loop_depth += 1;
 
         self.consume(&TokenType::LeftParenthesis, "Expect a '(' after for")?;
 
@@ -300,9 +298,7 @@ impl Parser {
 
         self.consume(&TokenType::RightParenthesis, "Expect a ')' before for body")?;
 
-        self.loop_depth += 1;
         let mut body = self.stmt()?;
-        self.loop_depth -= 1;
 
         if let Some(expression) = increment {
             body = Stmt::BlockStmt(Box::new(BlockStmt {
@@ -321,7 +317,37 @@ impl Parser {
             }));
         }
 
+        self.loop_depth -= 1;
+
         Ok(body)
+    }
+
+    fn loop_control(&mut self) -> Result<Stmt, ParseError> {
+        let token = self.previous();
+
+        if self.loop_depth == 0 {
+            return Err(Self::error(
+                token,
+                "Cannot use break or continue outside a loop",
+            ));
+        }
+
+        if self.function_depth >= self.loop_depth {
+            return Err(Self::error(
+                token,
+                "Cannot use break or continue inside a function",
+            ));
+        }
+
+        let result = if token.token_type == TokenType::Continue {
+            Ok(Stmt::ContinueStmt)
+        } else {
+            Ok(Stmt::BreakStmt)
+        };
+
+        self.consume(&TokenType::SemiColon, "Expected ';' at end of loop control")?;
+
+        result
     }
 
     fn print_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -636,7 +662,7 @@ impl Parser {
             TokenType::Slash,
         ]) {
             Self::error(
-                &self.peek(),
+                self.previous(),
                 "Expect expression on left side of binary expression",
             );
 
@@ -690,7 +716,7 @@ impl Parser {
         &self.tokens[self.current]
     }
 
-    fn previous(&mut self) -> &Token {
+    fn previous(&self) -> &Token {
         &self.tokens[self.current - 1]
     }
 
@@ -701,26 +727,30 @@ impl Parser {
     }
 
     fn synchronize(&mut self) {
-        self.loop_depth = 0;
-        self.in_function = false;
         self.advance();
 
         while !self.is_at_end() {
+            if self.previous().token_type == TokenType::SemiColon {
+                return;
+            }
+
             match self.peek().token_type {
                 TokenType::Class
+                | TokenType::Function
+                | TokenType::Var
+                | TokenType::For
                 | TokenType::If
                 | TokenType::While
-                | TokenType::For
-                | TokenType::Var
-                | TokenType::Function
-                | TokenType::Return => return,
-                TokenType::SemiColon => {
-                    self.advance();
-
+                | TokenType::Print
+                | TokenType::Return
+                | TokenType::Continue
+                | TokenType::Break => {
                     return;
                 }
-                _ => self.advance(),
-            };
+                _ => {
+                    self.advance();
+                }
+            }
         }
     }
 }
