@@ -351,9 +351,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_expression_stmt(&mut self, stmt: ExpressionStmt) -> Self::Item {
-        let value = self.evaluate_and_map_error(stmt.expression)?;
-
-        println!("{}", value);
+        self.evaluate_and_map_error(stmt.expression)?;
 
         Ok(())
     }

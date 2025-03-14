@@ -11,7 +11,6 @@ use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
 use visitor::interpreter::{Interpreter, RuntimeError};
 
-#[allow(dead_code)]
 pub struct Lib {
     interpreter: Interpreter,
 }

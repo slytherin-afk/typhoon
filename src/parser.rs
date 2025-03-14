@@ -515,7 +515,7 @@ impl Parser {
                     Self::error(self.peek(), "Can't have more than 255 arguments.");
                 }
 
-                arguments.push(self.expression()?);
+                arguments.push(self.assignment()?);
 
                 if !self.matches(&[TokenType::Comma]) {
                     break;

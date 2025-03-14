@@ -1,4 +1,4 @@
-use std::ptr;
+use std::rc::Rc;
 
 use crate::{
     object::Object,
@@ -93,7 +93,7 @@ impl PartialEq for Object {
             (Object::Boolean(a), Object::Number(b)) => bool_to_number(*a) == *b,
             (Object::String(a), Object::String(b)) => a == b,
             (Object::Boolean(a), Object::Boolean(b)) => a == b,
-            (Object::Callable(a), Object::Callable(b)) => ptr::eq(a, b),
+            (Object::Callable(a), Object::Callable(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
