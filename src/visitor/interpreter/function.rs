@@ -24,17 +24,15 @@ impl Callable for Function {
             env.define(self.declaration.params[i].lexeme.to_string(), arg);
         }
 
-        interpreter
-            .execute_block(self.declaration.body.clone(), env)
-            .map_err(|e| {
-                if let Exception::RuntimeError(e) = e {
-                    e
-                } else {
-                    unreachable!()
-                }
-            })?;
-
-        Ok(Object::Undefined)
+        if let Err(err) = interpreter.execute_block(self.declaration.body.clone(), env) {
+            match err {
+                Exception::RuntimeError(runtime_error) => Err(runtime_error),
+                Exception::ReturnException(object) => Ok(object),
+                _ => unreachable!(),
+            }
+        } else {
+            Ok(Object::Undefined)
+        }
     }
 
     fn to_string(&self) -> String {

@@ -18,6 +18,7 @@ use crate::{
         function_stmt::FunctionStmt,
         if_stmt::IfStmt,
         print_stmt::PrintStmt,
+        return_stmt::ReturnStmt,
         variable_stmt::{VariableDeclaration, VariableStmt},
         while_stmt::WhileStmt,
         Stmt,
@@ -102,6 +103,8 @@ impl Parser {
             self.if_stmt()
         } else if self.matches(&[TokenType::Function]) {
             self.function_stmt("function")
+        } else if self.matches(&[TokenType::Return]) {
+            self.return_stmt()
         } else if self.matches(&[TokenType::While]) {
             self.while_stmt()
         } else if self.matches(&[TokenType::For]) {
@@ -222,6 +225,22 @@ impl Parser {
             params,
             body,
         })))
+    }
+
+    fn return_stmt(&self) -> Result<Stmt, ParseError> {
+        let keyword = self.previous().clone();
+        let value = if !self.check(&TokenType::SemiColon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            &TokenType::SemiColon,
+            &format!("Expect ';' at the end of return"),
+        )?;
+
+        Ok(Stmt::ReturnStmt(Box::new(ReturnStmt { keyword, value })))
     }
 
     fn while_stmt(&self) -> Result<Stmt, ParseError> {

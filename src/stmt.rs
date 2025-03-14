@@ -4,6 +4,7 @@ pub mod expression_stmt;
 pub mod function_stmt;
 pub mod if_stmt;
 pub mod print_stmt;
+pub mod return_stmt;
 pub mod variable_stmt;
 pub mod while_stmt;
 
@@ -13,6 +14,7 @@ use expression_stmt::ExpressionStmt;
 use function_stmt::FunctionStmt;
 use if_stmt::IfStmt;
 use print_stmt::PrintStmt;
+use return_stmt::ReturnStmt;
 use variable_stmt::VariableStmt;
 use while_stmt::WhileStmt;
 
@@ -26,6 +28,7 @@ pub enum Stmt {
     IfStmt(Box<IfStmt>),
     WhileStmt(Box<WhileStmt>),
     FunctionStmt(Box<FunctionStmt>),
+    ReturnStmt(Box<ReturnStmt>),
     EmptyStmt,
     ContinueStmt,
     BreakStmt,

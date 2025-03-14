@@ -20,7 +20,7 @@ use crate::{
     stmt::{
         block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
         function_stmt::FunctionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
-        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
+        return_stmt::ReturnStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
     },
     Lib,
 };
@@ -52,6 +52,7 @@ pub struct ContinueException;
 
 pub enum Exception {
     RuntimeError(RuntimeError),
+    ReturnException(Object),
     BreakException,
     ContinueException,
 }
@@ -284,6 +285,16 @@ impl StmtVisitor for Interpreter {
             .define(name, Object::Callable(Rc::new(function)));
 
         Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, stmt: ReturnStmt) -> Self::Item {
+        let value = if let Some(value) = stmt.value {
+            self.evaluate_and_map_error(value)?
+        } else {
+            Object::Undefined
+        };
+
+        Err(Exception::ReturnException(value))
     }
 
     fn visit_while_stmt(&mut self, stmt: WhileStmt) -> Self::Item {
