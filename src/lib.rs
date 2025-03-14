@@ -1,4 +1,3 @@
-pub mod callee;
 pub mod environment;
 pub mod expression;
 pub mod object;
@@ -64,16 +63,16 @@ impl Lib {
             return;
         }
 
-        let mut statements = statements.expect("got valid statements");
+        let statements = statements.expect("got valid statements");
 
-        self.interpreter.interpret(&mut statements);
+        self.interpreter.interpret(statements);
     }
 
     pub fn error_one(line: usize, message: &str) {
         Lib::report(line, "", message);
     }
 
-    pub fn error_two<'a>(token: &'a Token, message: &str) {
+    pub fn error_two(token: &Token, message: &str) {
         if token.token_type == TokenType::Eof {
             Lib::report(token.line, "at end", message);
         } else {

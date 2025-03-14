@@ -1,5 +1,6 @@
 use super::Stmt;
 
-pub struct BlockStmt<'a> {
-    pub stmts: Vec<Stmt<'a>>,
+#[derive(Clone)]
+pub struct BlockStmt {
+    pub stmts: Vec<Stmt>,
 }

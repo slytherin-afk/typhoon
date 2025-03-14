@@ -1,5 +1,6 @@
 use crate::expression::Expression;
 
-pub struct ExpressionStmt<'a> {
-    pub expression: Expression<'a>,
+#[derive(Clone)]
+pub struct ExpressionStmt {
+    pub expression: Expression,
 }

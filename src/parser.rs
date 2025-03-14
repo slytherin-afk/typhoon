@@ -15,6 +15,7 @@ use crate::{
         block_stmt::BlockStmt,
         exit_stmt::ExitStmt,
         expression_stmt::ExpressionStmt,
+        function_stmt::FunctionStmt,
         if_stmt::IfStmt,
         print_stmt::PrintStmt,
         variable_stmt::{VariableDeclaration, VariableStmt},
@@ -24,14 +25,11 @@ use crate::{
     Lib,
 };
 
-struct Counter {
-    current: usize,
-    loop_depth: usize,
-}
-
 pub struct Parser {
     tokens: Vec<Token>,
-    counter: RefCell<Counter>,
+    current: RefCell<usize>,
+    loop_depth: RefCell<usize>,
+    in_function: RefCell<bool>,
 }
 
 #[derive(Debug)]
@@ -41,10 +39,9 @@ impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens,
-            counter: RefCell::new(Counter {
-                current: 0,
-                loop_depth: 0,
-            }),
+            current: RefCell::new(0),
+            loop_depth: RefCell::new(0),
+            in_function: RefCell::new(false),
         }
     }
 
@@ -75,8 +72,9 @@ impl Parser {
     fn variable_stmt(&self) -> Result<Stmt, ParseError> {
         let mut variables = vec![];
         let mut parse_variable = || {
-            let name = self.consume(&TokenType::Identifier, "Expect an identifier")?;
-
+            let name = self
+                .consume(&TokenType::Identifier, "Expect an identifier")?
+                .clone();
             let initializer = if self.matches(&[TokenType::Equal]) {
                 Some(self.assignment()?)
             } else {
@@ -102,6 +100,8 @@ impl Parser {
     fn stmt(&self) -> Result<Stmt, ParseError> {
         if self.matches(&[TokenType::If]) {
             self.if_stmt()
+        } else if self.matches(&[TokenType::Function]) {
+            self.function_stmt("function")
         } else if self.matches(&[TokenType::While]) {
             self.while_stmt()
         } else if self.matches(&[TokenType::For]) {
@@ -117,25 +117,19 @@ impl Parser {
         } else if self.matches(&[TokenType::SemiColon]) {
             Ok(Stmt::EmptyStmt)
         } else if self.matches(&[TokenType::Break]) {
-            if self.counter.borrow().loop_depth == 0 {
-                return Err(Self::error(
-                    self.previous(),
-                    "Break can only be used in a loop",
-                ));
+            if *self.loop_depth.borrow() == 0 || *self.in_function.borrow() {
+                Self::error(self.previous(), "Break can only be used in a loop");
             }
 
-            self.consume(&TokenType::SemiColon, "Expect a ';'")?;
+            self.consume(&TokenType::SemiColon, "Expect a ';' at the end of break")?;
 
             Ok(Stmt::BreakStmt)
         } else if self.matches(&[TokenType::Continue]) {
-            if self.counter.borrow().loop_depth == 0 {
-                return Err(Self::error(
-                    self.previous(),
-                    "Continue can only be used in a loop",
-                ));
+            if *self.loop_depth.borrow() == 0 || *self.in_function.borrow() {
+                Self::error(self.previous(), "Continue can only be used in a loop");
             }
 
-            self.consume(&TokenType::SemiColon, "Expect a ';'")?;
+            self.consume(&TokenType::SemiColon, "Expect a ';' at the of continue")?;
 
             Ok(Stmt::ContinueStmt)
         } else {
@@ -143,12 +137,24 @@ impl Parser {
         }
     }
 
+    fn block_stmt(&self) -> Result<Vec<Stmt>, ParseError> {
+        let mut stmts = vec![];
+
+        while !self.check(&TokenType::RightBraces) && !self.is_at_end() {
+            stmts.push(self.declaration_stmt()?);
+        }
+
+        self.consume(&TokenType::RightBraces, "Expect a '}' at the end of block")?;
+
+        Ok(stmts)
+    }
+
     fn if_stmt(&self) -> Result<Stmt, ParseError> {
-        self.consume(&TokenType::LeftParenthesis, "Expect a '('")?;
+        self.consume(&TokenType::LeftParenthesis, "Expect a '(' after if")?;
 
         let condition = self.expression()?;
 
-        self.consume(&TokenType::RightParenthesis, "Expect a ')'")?;
+        self.consume(&TokenType::RightParenthesis, "Expect a ')' before if body")?;
 
         let truth = self.stmt()?;
         let falsy = if self.matches(&[TokenType::Else]) {
@@ -164,7 +170,63 @@ impl Parser {
         })))
     }
 
+    fn function_stmt(&self, kind: &str) -> Result<Stmt, ParseError> {
+        *self.in_function.borrow_mut() = true;
+
+        let name = self
+            .consume(&TokenType::Identifier, &format!("Expect {kind} name"))?
+            .clone();
+
+        self.consume(
+            &TokenType::LeftParenthesis,
+            &format!("Expect '(' after {kind} name"),
+        )?;
+
+        let mut params = vec![];
+
+        if !self.check(&TokenType::RightParenthesis) {
+            loop {
+                if params.len() >= 255 {
+                    Self::error(self.peek(), "Can't have more than 255 parameters");
+                }
+
+                let param = self
+                    .consume(
+                        &TokenType::Identifier,
+                        &format!("Expect identifier after {kind} name"),
+                    )?
+                    .clone();
+
+                params.push(param);
+
+                if !self.matches(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(
+            &TokenType::RightParenthesis,
+            &format!("Expect ')' after {kind} params"),
+        )?;
+
+        self.consume(
+            &TokenType::LeftBraces,
+            &format!("Expect '{{' after {kind} params"),
+        )?;
+
+        let body = self.block_stmt()?;
+
+        Ok(Stmt::FunctionStmt(Box::new(FunctionStmt {
+            name,
+            params,
+            body,
+        })))
+    }
+
     fn while_stmt(&self) -> Result<Stmt, ParseError> {
+        *self.in_function.borrow_mut() = false;
+
         self.consume(&TokenType::LeftParenthesis, "Expect a '(' after while")?;
 
         let condition = self.expression()?;
@@ -174,14 +236,16 @@ impl Parser {
             "Expect a ')' before while body",
         )?;
 
-        // counter.loop_depth += 1;
+        *self.loop_depth.borrow_mut() += 1;
         let body = self.stmt()?;
-        // counter.loop_depth -= 1;
+        *self.loop_depth.borrow_mut() -= 1;
 
         Ok(Stmt::WhileStmt(Box::new(WhileStmt { condition, body })))
     }
 
     fn for_stmt(&self) -> Result<Stmt, ParseError> {
+        *self.in_function.borrow_mut() = false;
+
         self.consume(&TokenType::LeftParenthesis, "Expect a '(' after for")?;
 
         let initializer = if self.matches(&[TokenType::SemiColon]) {
@@ -213,9 +277,9 @@ impl Parser {
 
         self.consume(&TokenType::RightParenthesis, "Expect a ')' before for body")?;
 
-        // counter.loop_depth += 1;
+        *self.loop_depth.borrow_mut() += 1;
         let mut body = self.stmt()?;
-        // counter.loop_depth -= 1;
+        *self.loop_depth.borrow_mut() -= 1;
 
         if let Some(expression) = increment {
             body = Stmt::BlockStmt(Box::new(BlockStmt {
@@ -240,7 +304,7 @@ impl Parser {
     fn print_stmt(&self) -> Result<Stmt, ParseError> {
         let expression = self.expression()?;
 
-        self.consume(&TokenType::SemiColon, "Expect a ';'")?;
+        self.consume(&TokenType::SemiColon, "Expect a ';' at the end of print")?;
 
         Ok(Stmt::PrintStmt(Box::new(PrintStmt { expression })))
     }
@@ -252,29 +316,20 @@ impl Parser {
 
         let expression = self.expression()?;
 
-        self.consume(&TokenType::SemiColon, "Expect a ';'")?;
+        self.consume(&TokenType::SemiColon, "Expect a ';' at the end of exit")?;
 
         Ok(Stmt::ExitStmt(Box::new(ExitStmt {
             expression: Some(expression),
         })))
     }
 
-    fn block_stmt(&self) -> Result<Vec<Stmt>, ParseError> {
-        let mut stmts = vec![];
-
-        while !self.check(&TokenType::RightBraces) && !self.is_at_end() {
-            stmts.push(self.declaration_stmt()?);
-        }
-
-        self.consume(&TokenType::RightBraces, "Expect a '}'")?;
-
-        Ok(stmts)
-    }
-
     fn expr_stmt(&self) -> Result<Stmt, ParseError> {
         let expression = self.expression()?;
 
-        self.consume(&TokenType::SemiColon, "Expect a ';'")?;
+        self.consume(
+            &TokenType::SemiColon,
+            "Expect a ';' at the end of expression",
+        )?;
 
         Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt {
             expression,
@@ -300,7 +355,7 @@ impl Parser {
         let variable = self.ternary()?;
 
         if self.matches(&[TokenType::Equal]) {
-            match &variable {
+            match variable {
                 Expression::Variable(variable) => {
                     let expression = self.assignment()?;
 
@@ -311,7 +366,7 @@ impl Parser {
                 }
                 _ => Err(Self::error(
                     self.previous(),
-                    "Invalid left-hand side in assignment",
+                    "Invalid left hand side in assignment",
                 )),
             }
         } else {
@@ -325,7 +380,7 @@ impl Parser {
         if self.matches(&[TokenType::Question]) {
             let truth = self.expression()?;
 
-            self.consume(&TokenType::Colon, "Expect a ':'")?;
+            self.consume(&TokenType::Colon, "Expect a ':' a falsy expression")?;
 
             let falsy = self.expression()?;
 
@@ -343,7 +398,7 @@ impl Parser {
         let mut left = self.and()?;
 
         while self.matches(&[TokenType::Or]) {
-            let operator = self.previous();
+            let operator = self.previous().clone();
             let right = self.and()?;
             left = Expression::Logical(Box::new(Logical {
                 operator,
@@ -359,7 +414,7 @@ impl Parser {
         let mut left = self.equality()?;
 
         while self.matches(&[TokenType::And]) {
-            let operator = self.previous();
+            let operator = self.previous().clone();
             let right = self.equality()?;
             left = Expression::Logical(Box::new(Logical {
                 operator,
@@ -375,7 +430,7 @@ impl Parser {
         let mut left = self.comparison()?;
 
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual]) {
-            let operator = self.previous();
+            let operator = self.previous().clone();
             let right = self.comparison()?;
             left = Expression::Binary(Box::new(Binary {
                 left,
@@ -396,8 +451,8 @@ impl Parser {
             TokenType::Less,
             TokenType::Greater,
         ]) {
-            let operator = self.previous();
-            let right: Expression<'_> = self.term()?;
+            let operator = self.previous().clone();
+            let right = self.term()?;
             left = Expression::Binary(Box::new(Binary {
                 left,
                 operator,
@@ -412,7 +467,7 @@ impl Parser {
         let mut left = self.factor()?;
 
         while self.matches(&[TokenType::Minus, TokenType::Plus]) {
-            let operator = self.previous();
+            let operator = self.previous().clone();
             let right = self.factor()?;
             left = Expression::Binary(Box::new(Binary {
                 left,
@@ -428,7 +483,7 @@ impl Parser {
         let mut left = self.unary()?;
 
         while self.matches(&[TokenType::Star, TokenType::Slash]) {
-            let operator = self.previous();
+            let operator = self.previous().clone();
             let right = self.unary()?;
             left = Expression::Binary(Box::new(Binary {
                 left,
@@ -442,17 +497,16 @@ impl Parser {
 
     fn unary(&self) -> Result<Expression, ParseError> {
         if self.matches(&[TokenType::Bang, TokenType::Minus]) {
-            let operator = self.previous();
+            let operator = self.previous().clone();
             let right = self.unary()?;
-            let expression = Expression::Unary(Box::new(Unary { operator, right }));
 
-            Ok(expression)
+            Ok(Expression::Unary(Box::new(Unary { operator, right })))
         } else {
             self.call()
         }
     }
 
-    fn finish_call<'a>(&'a self, callee: Expression<'a>) -> Result<Expression<'a>, ParseError> {
+    fn finish_call(&self, callee: Expression) -> Result<Expression, ParseError> {
         let mut arguments = vec![];
 
         if !self.check(&TokenType::RightParenthesis) {
@@ -469,8 +523,9 @@ impl Parser {
             }
         }
 
-        let paren: &Token =
-            self.consume(&TokenType::RightParenthesis, "Expect ')' after arguments")?;
+        let paren = self
+            .consume(&TokenType::RightParenthesis, "Expect ')' after arguments")?
+            .clone();
 
         Ok(Expression::Call(Box::new(Call {
             arguments,
@@ -509,7 +564,7 @@ impl Parser {
 
             if let LiteralType::String(value) = string {
                 return Ok(Expression::Literal(Box::new(Literal {
-                    value: Object::String(value.to_string()),
+                    value: Object::String(String::from(value)),
                 })));
             }
         }
@@ -534,7 +589,7 @@ impl Parser {
 
         if self.matches(&[TokenType::Identifier]) {
             return Ok(Expression::Variable(Box::new(Variable {
-                name: self.previous(),
+                name: self.previous().clone(),
             })));
         }
 
@@ -557,12 +612,15 @@ impl Parser {
             TokenType::Star,
             TokenType::Slash,
         ]) {
-            Self::error(self.peek(), "Binary operator required left hand expression");
+            Self::error(
+                &self.peek(),
+                "Expect expression on left side of binary expression",
+            );
 
             return self.expression();
         }
 
-        Err(Self::error(self.peek(), "Expect an expression"))
+        Err(Self::error(&self.peek(), "Expect an expression"))
     }
 
     fn matches(&self, tokens: &[TokenType]) -> bool {
@@ -595,7 +653,7 @@ impl Parser {
 
     fn advance(&self) -> &Token {
         if !self.is_at_end() {
-            self.counter.borrow_mut().current += 1;
+            *self.current.borrow_mut() += 1;
         }
 
         self.previous()
@@ -606,21 +664,22 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        &self.tokens[self.counter.borrow().current]
+        &self.tokens[*self.current.borrow()]
     }
 
     fn previous(&self) -> &Token {
-        &self.tokens[self.counter.borrow().current - 1]
+        &self.tokens[*self.current.borrow() - 1]
     }
 
-    fn error<'b>(token: &'b Token, message: &str) -> ParseError {
+    fn error(token: &Token, message: &str) -> ParseError {
         Lib::error_two(token, message);
 
         ParseError
     }
 
     fn synchronize(&self) {
-        self.counter.borrow_mut().loop_depth = 0;
+        *self.loop_depth.borrow_mut() = 0;
+        *self.in_function.borrow_mut() = false;
         self.advance();
 
         while !self.is_at_end() {

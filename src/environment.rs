@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{object::Object, scanner::token::Token, visitor::interpreter::RuntimeError};
 
 pub struct Environment {
-    values: HashMap<String, Object>,
+    values: HashMap<String, Rc<Object>>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -15,11 +15,11 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, token: &Token) -> Result<Object, RuntimeError> {
-        if self.values.contains_key(&token.lexeme) {
-            Ok(self.values.get(&token.lexeme).unwrap().clone())
+    pub fn get(&self, token: Token) -> Result<Rc<Object>, RuntimeError> {
+        if let Some(obj) = self.values.get(&token.lexeme) {
+            Ok(Rc::clone(obj))
         } else if let Some(env) = &self.enclosing {
-            return env.borrow().get(token);
+            env.borrow().get(token)
         } else {
             Err(RuntimeError::new(
                 token.clone(),
@@ -28,13 +28,13 @@ impl Environment {
         }
     }
 
-    pub fn assign(&mut self, token: &Token, value: Object) -> Result<(), RuntimeError> {
+    pub fn assign(&mut self, token: Token, value: Rc<Object>) -> Result<(), RuntimeError> {
         if self.values.contains_key(&token.lexeme) {
-            self.values.insert(token.lexeme.to_string(), value);
+            self.values.insert(token.lexeme, value);
 
             Ok(())
-        } else if let Some(env) = &mut self.enclosing {
-            return env.borrow_mut().assign(token, value);
+        } else if let Some(env) = &self.enclosing {
+            env.borrow_mut().assign(token, value)
         } else {
             Err(RuntimeError::new(
                 token.clone(),
@@ -43,7 +43,8 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: String, value: Object) {
+    pub fn define(&mut self, name: String, value: Rc<Object>) -> &mut Self {
         self.values.insert(name, value);
+        self
     }
 }

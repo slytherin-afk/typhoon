@@ -1,3 +1,5 @@
+use std::ptr;
+
 use crate::{
     object::Object,
     scanner::{token::Token, token_type::TokenType},
@@ -82,6 +84,21 @@ pub fn handle_comparison(
     Ok(Object::Boolean(value))
 }
 
+impl PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Object::Undefined, Object::Undefined) => true,
+            (Object::Number(a), Object::Number(b)) => a == b,
+            (Object::Number(a), Object::Boolean(b)) => *a == bool_to_number(*b),
+            (Object::Boolean(a), Object::Number(b)) => bool_to_number(*a) == *b,
+            (Object::String(a), Object::String(b)) => a == b,
+            (Object::Boolean(a), Object::Boolean(b)) => a == b,
+            (Object::Callable(a), Object::Callable(b)) => ptr::eq(a, b),
+            _ => false,
+        }
+    }
+}
+
 pub fn validate_addition_operands(
     left: &Object,
     right: &Object,
@@ -137,6 +154,6 @@ pub fn is_truthy(literal: &Object) -> bool {
         Object::Number(number) => *number != 0.0,
         Object::String(string) => !string.is_empty(),
         Object::Boolean(boolean) => *boolean,
-        Object::Callee(_) => true,
+        Object::Callable(_) => true,
     }
 }

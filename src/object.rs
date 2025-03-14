@@ -1,14 +1,14 @@
-use std::fmt;
+use std::{fmt, rc::Rc};
 
-use crate::callee::Callee;
+use crate::visitor::interpreter::callable::Callable;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Object {
     Undefined,
     Number(f64),
     String(String),
     Boolean(bool),
-    Callee(Callee),
+    Callable(Rc<dyn Callable>),
 }
 
 impl fmt::Display for Object {
@@ -18,13 +18,7 @@ impl fmt::Display for Object {
             Object::Number(n) => &n.to_string(),
             Object::String(s) => &s.to_string(),
             Object::Boolean(b) => &b.to_string(),
-            Object::Callee(callee) => {
-                if let Some(to_string) = &(callee.to_string) {
-                    &to_string()
-                } else {
-                    "[Function]"
-                }
-            }
+            Object::Callable(callee) => &callee.to_string(),
         };
 
         write!(f, "{value}")

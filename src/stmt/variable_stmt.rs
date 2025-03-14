@@ -1,10 +1,12 @@
 use crate::{expression::Expression, scanner::token::Token};
 
-pub struct VariableDeclaration<'a> {
-    pub name: &'a Token,
-    pub initializer: Option<Expression<'a>>,
+#[derive(Clone)]
+pub struct VariableDeclaration {
+    pub name: Token,
+    pub initializer: Option<Expression>,
 }
 
-pub struct VariableStmt<'a> {
-    pub variables: Vec<VariableDeclaration<'a>>,
+#[derive(Clone)]
+pub struct VariableStmt {
+    pub variables: Vec<VariableDeclaration>,
 }

@@ -2,8 +2,9 @@ use crate::scanner::token::Token;
 
 use super::Expression;
 
-pub struct Logical<'a> {
-    pub operator: &'a Token,
-    pub left: Expression<'a>,
-    pub right: Expression<'a>,
+#[derive(Clone)]
+pub struct Logical {
+    pub operator: Token,
+    pub left: Expression,
+    pub right: Expression,
 }

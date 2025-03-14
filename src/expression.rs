@@ -20,15 +20,16 @@ use ternary::Ternary;
 use unary::Unary;
 use variable::Variable;
 
-pub enum Expression<'a> {
-    Comma(Box<Comma<'a>>),
-    Ternary(Box<Ternary<'a>>),
-    Binary(Box<Binary<'a>>),
-    Unary(Box<Unary<'a>>),
-    Grouping(Box<Grouping<'a>>),
+#[derive(Clone)]
+pub enum Expression {
+    Comma(Box<Comma>),
+    Ternary(Box<Ternary>),
+    Binary(Box<Binary>),
+    Unary(Box<Unary>),
+    Grouping(Box<Grouping>),
     Literal(Box<Literal>),
-    Variable(Box<Variable<'a>>),
-    Assignment(Box<Assignment<'a>>),
-    Logical(Box<Logical<'a>>),
-    Call(Box<Call<'a>>),
+    Variable(Box<Variable>),
+    Assignment(Box<Assignment>),
+    Logical(Box<Logical>),
+    Call(Box<Call>),
 }

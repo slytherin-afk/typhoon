@@ -1,7 +1,8 @@
 use super::Expression;
 
-pub struct Ternary<'a> {
-    pub condition: Expression<'a>,
-    pub truth: Expression<'a>,
-    pub falsy: Expression<'a>,
+#[derive(Clone)]
+pub struct Ternary {
+    pub condition: Expression,
+    pub truth: Expression,
+    pub falsy: Expression,
 }

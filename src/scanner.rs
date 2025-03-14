@@ -40,7 +40,7 @@ impl Scanner {
     pub fn new(source: String) -> Self {
         Self {
             source,
-            tokens: vec![],
+            tokens: Vec::with_capacity(100),
             current: 0,
             start: 0,
             line: 1,
@@ -172,7 +172,7 @@ impl Scanner {
 
                     self.add_token_with_literal(
                         TokenType::StringLiteral,
-                        Some(LiteralType::String(literal.to_string())),
+                        Some(LiteralType::String(String::from(literal))),
                     );
 
                     return;
@@ -263,8 +263,8 @@ impl Scanner {
     }
 
     fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<LiteralType>) {
-        let lexeme = self.source[self.start..self.current].to_string();
-        let token = Token::new(token_type, lexeme, literal, self.line);
+        let lexeme = &self.source[self.start..self.current];
+        let token = Token::new(token_type, String::from(lexeme), literal, self.line);
         self.tokens.push(token);
     }
 }

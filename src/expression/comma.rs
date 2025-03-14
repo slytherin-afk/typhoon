@@ -1,6 +1,7 @@
 use super::Expression;
 
-pub struct Comma<'a> {
-    pub left: Expression<'a>,
-    pub right: Expression<'a>,
+#[derive(Clone)]
+pub struct Comma {
+    pub left: Expression,
+    pub right: Expression,
 }

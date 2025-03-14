@@ -1,11 +1,14 @@
+pub mod callable;
+pub mod function;
+pub mod globals;
 pub mod operations;
 
 use std::{cell::RefCell, process::exit, rc::Rc};
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use function::Function;
+use globals::Clock;
 
 use crate::{
-    callee::Callee,
     environment::Environment,
     expression::{
         assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
@@ -16,8 +19,8 @@ use crate::{
     scanner::{token::Token, token_type::TokenType},
     stmt::{
         block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
-        if_stmt::IfStmt, print_stmt::PrintStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt,
-        Stmt,
+        function_stmt::FunctionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
+        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
     },
     Lib,
 };
@@ -65,19 +68,7 @@ impl Interpreter {
 
         globals.borrow_mut().define(
             "clock".to_string(),
-            Object::Callee(Callee {
-                arity: Rc::new(|| 0),
-                call: Rc::new(|_, _| {
-                    let now = SystemTime::now();
-                    let millis = now
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_millis() as f64;
-
-                    Ok(Object::Number(millis))
-                }),
-                to_string: Some(Rc::new(|| "[Native Function]".to_string())),
-            }),
+            Rc::new(Object::Callable(Rc::new(Clock))),
         );
 
         Self {
@@ -86,7 +77,7 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, stmts: &mut Vec<Stmt>) {
+    pub fn interpret(&mut self, stmts: Vec<Stmt>) {
         for stmt in stmts {
             if let Err(e) = self.execute(stmt) {
                 match e {
@@ -97,28 +88,24 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, expr: &mut Expression) -> Result<Object, RuntimeError> {
+    fn evaluate(&mut self, expr: Expression) -> Result<Rc<Object>, RuntimeError> {
         expr.accept(self)
     }
 
-    fn evaluate_and_map_error(&mut self, expr: &mut Expression) -> Result<Object, Exception> {
+    fn evaluate_and_map_error(&mut self, expr: Expression) -> Result<Rc<Object>, Exception> {
         self.evaluate(expr).map_err(|e| Exception::RuntimeError(e))
     }
 
-    fn execute(&mut self, stmt: &mut Stmt) -> Result<(), Exception> {
+    fn execute(&mut self, stmt: Stmt) -> Result<(), Exception> {
         stmt.accept(self)
     }
 
-    fn execute_block(
-        &mut self,
-        block: &mut BlockStmt,
-        env: Rc<RefCell<Environment>>,
-    ) -> Result<(), Exception> {
+    fn execute_block(&mut self, stmts: Vec<Stmt>, env: Environment) -> Result<(), Exception> {
         let previous_env = Rc::clone(&self.environment);
-        self.environment = env;
+        self.environment = Rc::new(RefCell::new(env));
         let mut error = None;
 
-        for stmt in &mut block.stmts {
+        for stmt in stmts {
             if let Err(err) = self.execute(stmt) {
                 error = Some(err);
                 break;
@@ -136,28 +123,61 @@ impl Interpreter {
 }
 
 impl ExpressionVisitor for Interpreter {
-    type Item = Result<Object, RuntimeError>;
+    type Item = Result<Rc<Object>, RuntimeError>;
 
-    fn visit_comma(&mut self, expr: &mut Comma) -> Self::Item {
-        self.evaluate(&mut expr.left)?;
-        self.evaluate(&mut expr.right)
+    fn visit_comma(&mut self, expr: Comma) -> Self::Item {
+        self.evaluate(expr.left)?;
+        self.evaluate(expr.right)
     }
 
-    fn visit_ternary(&mut self, expr: &mut Ternary) -> Self::Item {
-        let condition = self.evaluate(&mut expr.condition)?;
+    fn visit_assignment(&mut self, expr: Assignment) -> Self::Item {
+        let value = self.evaluate(expr.expression)?;
+
+        self.environment
+            .borrow_mut()
+            .assign(expr.name, Rc::clone(&value))?;
+
+        Ok(value)
+    }
+
+    fn visit_ternary(&mut self, expr: Ternary) -> Self::Item {
+        let condition = self.evaluate(expr.condition)?;
 
         if operations::is_truthy(&condition) {
-            self.evaluate(&mut expr.truth)
+            self.evaluate(expr.truth)
         } else {
-            self.evaluate(&mut expr.falsy)
+            self.evaluate(expr.falsy)
         }
     }
 
-    fn visit_binary(&mut self, expr: &mut Binary) -> Self::Item {
-        let left = self.evaluate(&mut expr.left)?;
-        let right = self.evaluate(&mut expr.right)?;
+    fn visit_logical(&mut self, expr: Logical) -> Self::Item {
+        let left = self.evaluate(expr.left)?;
+        let is_truthy = operations::is_truthy(&left);
+        let value = match expr.operator.token_type {
+            TokenType::And => {
+                if is_truthy {
+                    self.evaluate(expr.right)?
+                } else {
+                    left
+                }
+            }
+            TokenType::Or => {
+                if is_truthy {
+                    left
+                } else {
+                    self.evaluate(expr.right)?
+                }
+            }
+            _ => unreachable!(),
+        };
 
-        match &expr.operator.token_type {
+        Ok(value)
+    }
+
+    fn visit_binary(&mut self, expr: Binary) -> Self::Item {
+        let left = self.evaluate(expr.left)?;
+        let right = self.evaluate(expr.right)?;
+        let value = match &expr.operator.token_type {
             TokenType::Plus => operations::handle_addition(&left, &right, &expr.operator),
             TokenType::Minus | TokenType::Star | TokenType::Slash => {
                 operations::handle_arithmetic(&left, &right, &expr.operator)
@@ -169,15 +189,17 @@ impl ExpressionVisitor for Interpreter {
             TokenType::BangEqual => Ok(Object::Boolean(left != right)),
             TokenType::EqualEqual => Ok(Object::Boolean(left == right)),
             _ => unreachable!(),
-        }
+        }?;
+
+        Ok(Rc::new(value))
     }
 
-    fn visit_unary(&mut self, expr: &mut Unary) -> Self::Item {
-        let literal = self.evaluate(&mut expr.right)?;
+    fn visit_unary(&mut self, expr: Unary) -> Self::Item {
+        let literal = self.evaluate(expr.right)?;
         let literal = match expr.operator.token_type {
             TokenType::Bang => Object::Boolean(!operations::is_truthy(&literal)),
             TokenType::Minus => {
-                let literal = match literal {
+                let literal = match *literal {
                     Object::Number(number) => number,
                     Object::Boolean(boolean) => operations::bool_to_number(boolean),
                     _ => {
@@ -193,66 +215,20 @@ impl ExpressionVisitor for Interpreter {
             _ => unreachable!(),
         };
 
-        Ok(literal)
+        Ok(Rc::new(literal))
     }
 
-    fn visit_grouping(&mut self, expr: &mut Grouping) -> Self::Item {
-        self.evaluate(&mut expr.expression)
-    }
-
-    fn visit_literal(&mut self, expr: &mut Literal) -> Self::Item {
-        Ok(expr.value.clone())
-    }
-
-    fn visit_variable(&mut self, expr: &mut Variable) -> Self::Item {
-        self.environment.borrow().get(&expr.name)
-    }
-
-    fn visit_assignment(&mut self, expr: &mut Assignment) -> Self::Item {
-        let value = self.evaluate(&mut expr.expression)?;
-
-        self.environment
-            .borrow_mut()
-            .assign(expr.name, value.clone())?;
-
-        Ok(value)
-    }
-
-    fn visit_logical(&mut self, expr: &mut Logical) -> Self::Item {
-        let left = self.evaluate(&mut expr.left)?;
-        let is_truthy = operations::is_truthy(&left);
-        let value = match expr.operator.token_type {
-            TokenType::And => {
-                if is_truthy {
-                    self.evaluate(&mut expr.right)?
-                } else {
-                    left
-                }
-            }
-            TokenType::Or => {
-                if is_truthy {
-                    left
-                } else {
-                    self.evaluate(&mut expr.right)?
-                }
-            }
-            _ => unreachable!(),
-        };
-
-        Ok(value)
-    }
-
-    fn visit_call(&mut self, expr: &mut Call) -> Self::Item {
-        let callee = self.evaluate(&mut expr.callee)?;
+    fn visit_call(&mut self, expr: Call) -> Self::Item {
+        let callee = self.evaluate(expr.callee)?;
         let arguments = expr
             .arguments
-            .iter_mut()
+            .into_iter()
             .map(|f| self.evaluate(f))
             .collect::<Result<Vec<_>, _>>()?;
 
-        match callee {
-            Object::Callee(c) => {
-                let arity = (c.arity)();
+        match &*callee {
+            Object::Callable(c) => {
+                let arity = c.arity();
 
                 if arguments.len() < arity {
                     Err(RuntimeError::new(
@@ -260,7 +236,7 @@ impl ExpressionVisitor for Interpreter {
                         format!("Expected [{arity}] arguments got [{}]", arguments.len()),
                     ))
                 } else {
-                    (c.call)(self.clone(), arguments)
+                    c.call(self, arguments)
                 }
             }
             _ => Err(RuntimeError::new(
@@ -269,24 +245,100 @@ impl ExpressionVisitor for Interpreter {
             )),
         }
     }
+
+    fn visit_grouping(&mut self, expr: Grouping) -> Self::Item {
+        self.evaluate(expr.expression)
+    }
+
+    fn visit_literal(&mut self, expr: Literal) -> Self::Item {
+        Ok(Rc::new(expr.value))
+    }
+
+    fn visit_variable(&mut self, expr: Variable) -> Self::Item {
+        self.environment.borrow().get(expr.name)
+    }
 }
 
 impl StmtVisitor for Interpreter {
     type Item = Result<(), Exception>;
 
-    fn visit_print_stmt(&mut self, stmt: &mut PrintStmt) -> Self::Item {
-        let value = self.evaluate_and_map_error(&mut stmt.expression)?;
+    fn visit_variable_stmt(&mut self, stmt: VariableStmt) -> Self::Item {
+        for var in stmt.variables {
+            let value = if let Some(expr) = var.initializer {
+                self.evaluate_and_map_error(expr)?
+            } else {
+                Rc::new(Object::Undefined)
+            };
+
+            self.environment
+                .borrow_mut()
+                .define(var.name.lexeme.to_string(), value);
+        }
+
+        Ok(())
+    }
+
+    fn visit_function_stmt(&mut self, stmt: FunctionStmt) -> Self::Item {
+        let name = stmt.name.lexeme.to_string();
+        let function = Function { declaration: stmt };
+
+        self.environment
+            .borrow_mut()
+            .define(name, Rc::new(Object::Callable(Rc::new(function))));
+
+        Ok(())
+    }
+
+    fn visit_while_stmt(&mut self, stmt: WhileStmt) -> Self::Item {
+        while operations::is_truthy(&*self.evaluate_and_map_error(stmt.condition.clone())?) {
+            let result = self.execute(stmt.body.clone());
+
+            if let Err(e) = &result {
+                match e {
+                    Exception::BreakException => break,
+                    Exception::ContinueException => continue,
+                    _ => result?,
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn visit_if_stmt(&mut self, stmt: IfStmt) -> Self::Item {
+        let condition = self.evaluate_and_map_error(stmt.condition)?;
+
+        if operations::is_truthy(&condition) {
+            self.execute(stmt.truth)?;
+        } else if let Some(falsy_stmt) = stmt.falsy {
+            self.execute(falsy_stmt)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_block_stmt(&mut self, stmt: BlockStmt) -> Self::Item {
+        self.execute_block(
+            stmt.stmts,
+            Environment::new(Some(Rc::clone(&self.environment))),
+        )?;
+
+        Ok(())
+    }
+
+    fn visit_print_stmt(&mut self, stmt: PrintStmt) -> Self::Item {
+        let value = self.evaluate_and_map_error(stmt.expression)?;
 
         println!("{}", value);
 
         Ok(())
     }
 
-    fn visit_exit_stmt(&mut self, stmt: &mut ExitStmt) -> Self::Item {
-        let exit_code = match &mut stmt.expression {
+    fn visit_exit_stmt(&mut self, stmt: ExitStmt) -> Self::Item {
+        let exit_code = match stmt.expression {
             Some(expression) => {
                 let value = self.evaluate_and_map_error(expression)?;
-                match value {
+                match *value {
                     Object::Number(_) | Object::Boolean(_) => operations::to_number(&value) as i32,
                     _ => {
                         println!("{value}");
@@ -301,65 +353,10 @@ impl StmtVisitor for Interpreter {
         exit(exit_code);
     }
 
-    fn visit_expression_stmt(&mut self, stmt: &mut ExpressionStmt) -> Self::Item {
-        let value = self.evaluate_and_map_error(&mut stmt.expression)?;
+    fn visit_expression_stmt(&mut self, stmt: ExpressionStmt) -> Self::Item {
+        let value = self.evaluate_and_map_error(stmt.expression)?;
 
         println!("{}", value);
-
-        Ok(())
-    }
-
-    fn visit_variable_stmt(&mut self, stmt: &mut VariableStmt) -> Self::Item {
-        for var in &mut stmt.variables {
-            let value = if let Some(expr) = &mut var.initializer {
-                self.evaluate_and_map_error(expr)?
-            } else {
-                Object::Undefined
-            };
-
-            self.environment
-                .borrow_mut()
-                .define(var.name.lexeme.to_string(), value.clone());
-        }
-
-        Ok(())
-    }
-
-    fn visit_block_stmt(&mut self, stmt: &mut BlockStmt) -> Self::Item {
-        self.execute_block(
-            stmt,
-            Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
-                &self.environment,
-            ))))),
-        )?;
-
-        Ok(())
-    }
-
-    fn visit_if_stmt(&mut self, stmt: &mut IfStmt) -> Self::Item {
-        let condition = self.evaluate_and_map_error(&mut stmt.condition)?;
-
-        if operations::is_truthy(&condition) {
-            self.execute(&mut stmt.truth)?;
-        } else if let Some(falsy_stmt) = &mut stmt.falsy {
-            self.execute(falsy_stmt)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_while_stmt(&mut self, stmt: &mut WhileStmt) -> Self::Item {
-        while operations::is_truthy(&self.evaluate_and_map_error(&mut stmt.condition)?) {
-            let result = self.execute(&mut stmt.body);
-
-            if let Err(e) = &result {
-                match e {
-                    Exception::BreakException => break,
-                    Exception::ContinueException => continue,
-                    _ => result?,
-                }
-            }
-        }
 
         Ok(())
     }
