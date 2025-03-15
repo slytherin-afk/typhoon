@@ -3,6 +3,7 @@ pub mod binary;
 pub mod call;
 pub mod comma;
 pub mod grouping;
+pub mod lambda;
 pub mod literal;
 pub mod logical;
 pub mod ternary;
@@ -14,6 +15,7 @@ use binary::Binary;
 use call::Call;
 use comma::Comma;
 use grouping::Grouping;
+use lambda::Lambda;
 use literal::Literal;
 use logical::Logical;
 use ternary::Ternary;
@@ -32,4 +34,5 @@ pub enum Expression {
     Assignment(Box<Assignment>),
     Logical(Box<Logical>),
     Call(Box<Call>),
+    Lambda(Box<Lambda>),
 }

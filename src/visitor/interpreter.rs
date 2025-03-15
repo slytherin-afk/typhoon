@@ -1,6 +1,7 @@
 pub mod callable;
 pub mod function;
 pub mod globals;
+pub mod lambda;
 pub mod operations;
 
 use super::{ExpressionVisitor, StmtVisitor};
@@ -8,8 +9,8 @@ use crate::{
     environment::Environment,
     expression::{
         assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
-        literal::Literal, logical::Logical, ternary::Ternary, unary::Unary, variable::Variable,
-        Expression,
+        lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
+        variable::Variable, Expression,
     },
     object::Object,
     scanner::{token::Token, token_type::TokenType},
@@ -22,6 +23,7 @@ use crate::{
 };
 use function::Function;
 use globals::Clock;
+use lambda::LambdaFunction;
 use std::{cell::RefCell, rc::Rc};
 
 pub struct RuntimeError {
@@ -64,7 +66,7 @@ impl Interpreter {
         let globals = Rc::new(RefCell::new(Environment::new(None)));
 
         globals.borrow_mut().define(
-            "clock".to_string(),
+            String::from("clock"),
             Rc::new(Object::Callable(Rc::new(Clock))),
         );
 
@@ -98,24 +100,15 @@ impl Interpreter {
     }
 
     fn execute_block(&mut self, stmts: Vec<Stmt>, env: Environment) -> Result<(), Exception> {
-        let previous_env = Rc::clone(&self.environment);
-        self.environment = Rc::new(RefCell::new(env));
-        let mut error = None;
+        let mut env_ref = Rc::new(RefCell::new(env));
 
-        for stmt in stmts {
-            if let Err(err) = self.execute(stmt) {
-                error = Some(err);
-                break;
-            }
-        }
+        std::mem::swap(&mut self.environment, &mut env_ref);
 
-        self.environment = previous_env;
+        let result = stmts.into_iter().try_for_each(|stmt| self.execute(stmt));
 
-        if let Some(err) = error {
-            Err(err)
-        } else {
-            Ok(())
-        }
+        std::mem::swap(&mut self.environment, &mut env_ref);
+
+        result
     }
 }
 
@@ -205,8 +198,8 @@ impl ExpressionVisitor for Interpreter {
                     Object::Boolean(boolean) => operations::bool_to_number(boolean),
                     _ => {
                         return Err(RuntimeError::new(
-                            expr.operator.clone(),
-                            "Unary minus requires number or boolean operand".to_string(),
+                            expr.operator,
+                            String::from("Unary minus requires number or boolean operand"),
                         ))
                     }
                 };
@@ -233,7 +226,7 @@ impl ExpressionVisitor for Interpreter {
 
                 if arguments.len() < arity {
                     Err(RuntimeError::new(
-                        expr.paren.clone(),
+                        expr.paren,
                         format!("Expected [{arity}] arguments got [{}]", arguments.len()),
                     ))
                 } else {
@@ -241,8 +234,8 @@ impl ExpressionVisitor for Interpreter {
                 }
             }
             _ => Err(RuntimeError::new(
-                expr.paren.clone(),
-                "Can only call functions and classes".to_string(),
+                expr.paren,
+                String::from("Can only call functions and classes"),
             )),
         }
     }
@@ -258,6 +251,15 @@ impl ExpressionVisitor for Interpreter {
     fn visit_variable(&mut self, expr: Variable) -> Self::Item {
         self.environment.borrow().get(expr.name)
     }
+
+    fn visit_lambda(&mut self, expr: Lambda) -> Self::Item {
+        let function = LambdaFunction {
+            declaration: expr,
+            closure: Rc::clone(&self.environment),
+        };
+
+        Ok(Rc::new(Object::Callable(Rc::new(function))))
+    }
 }
 
 impl StmtVisitor for Interpreter {
@@ -271,16 +273,14 @@ impl StmtVisitor for Interpreter {
                 Rc::new(Object::Undefined)
             };
 
-            self.environment
-                .borrow_mut()
-                .define(var.name.lexeme.to_string(), value);
+            self.environment.borrow_mut().define(var.name.lexeme, value);
         }
 
         Ok(())
     }
 
     fn visit_function_stmt(&mut self, stmt: FunctionStmt) -> Self::Item {
-        let name = stmt.name.lexeme.to_string();
+        let name = String::clone(&stmt.name.lexeme);
         let function = Function {
             declaration: stmt,
             closure: Rc::clone(&self.environment),

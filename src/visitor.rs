@@ -3,8 +3,8 @@ pub mod interpreter;
 use crate::{
     expression::{
         assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
-        literal::Literal, logical::Logical, ternary::Ternary, unary::Unary, variable::Variable,
-        Expression,
+        lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
+        variable::Variable, Expression,
     },
     stmt::{
         block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
@@ -26,6 +26,7 @@ trait ExpressionVisitor {
     fn visit_assignment(&mut self, expr: Assignment) -> Self::Item;
     fn visit_logical(&mut self, expr: Logical) -> Self::Item;
     fn visit_call(&mut self, expr: Call) -> Self::Item;
+    fn visit_lambda(&mut self, expr: Lambda) -> Self::Item;
 }
 
 impl Expression {
@@ -41,6 +42,7 @@ impl Expression {
             Expression::Assignment(assignment) => visitor.visit_assignment(*assignment),
             Expression::Logical(logical) => visitor.visit_logical(*logical),
             Expression::Call(call) => visitor.visit_call(*call),
+            Expression::Lambda(lambda) => visitor.visit_lambda(*lambda),
         }
     }
 }

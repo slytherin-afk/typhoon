@@ -1,8 +1,8 @@
 use crate::{
     expression::{
         assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
-        literal::Literal, logical::Logical, ternary::Ternary, unary::Unary, variable::Variable,
-        Expression,
+        lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
+        variable::Variable, Expression,
     },
     object::Object,
     scanner::{
@@ -369,7 +369,7 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expression, ParseError> {
-        return self.comma();
+        self.comma()
     }
 
     fn comma(&mut self) -> Result<Expression, ParseError> {
@@ -383,7 +383,59 @@ impl Parser {
         Ok(left)
     }
 
+    fn lambda(&mut self) -> Result<Expression, ParseError> {
+        self.function_depth += 1;
+
+        self.consume(
+            &TokenType::LeftParenthesis,
+            &format!("Expect '(' after anonymous function name"),
+        )?;
+
+        let mut params = vec![];
+
+        if !self.check(&TokenType::RightParenthesis) {
+            loop {
+                if params.len() >= 255 {
+                    Self::error(self.peek(), "Can't have more than 255 parameters");
+                }
+
+                let param = self
+                    .consume(
+                        &TokenType::Identifier,
+                        &format!("Expect identifier after anonymous function name"),
+                    )?
+                    .clone();
+
+                params.push(param);
+
+                if !self.matches(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(
+            &TokenType::RightParenthesis,
+            &format!("Expect ')' after anonymous function params"),
+        )?;
+
+        self.consume(
+            &TokenType::LeftBraces,
+            &format!("Expect '{{' after anonymous function params"),
+        )?;
+
+        let body = self.block_stmt()?;
+
+        self.function_depth -= 1;
+
+        Ok(Expression::Lambda(Box::new(Lambda { params, body })))
+    }
+
     fn assignment(&mut self) -> Result<Expression, ParseError> {
+        if self.matches(&[TokenType::Function]) {
+            return self.lambda();
+        }
+
         let variable = self.ternary()?;
 
         if self.matches(&[TokenType::Equal]) {
