@@ -1,5 +1,4 @@
 pub mod block_stmt;
-pub mod exit_stmt;
 pub mod expression_stmt;
 pub mod function_stmt;
 pub mod if_stmt;
@@ -9,7 +8,6 @@ pub mod variable_stmt;
 pub mod while_stmt;
 
 use block_stmt::BlockStmt;
-use exit_stmt::ExitStmt;
 use expression_stmt::ExpressionStmt;
 use function_stmt::FunctionStmt;
 use if_stmt::IfStmt;
@@ -24,7 +22,6 @@ pub enum Stmt {
     VariableStmt(Box<VariableStmt>),
     PrintStmt(Box<PrintStmt>),
     BlockStmt(Box<BlockStmt>),
-    ExitStmt(Box<ExitStmt>),
     IfStmt(Box<IfStmt>),
     WhileStmt(Box<WhileStmt>),
     FunctionStmt(Box<FunctionStmt>),

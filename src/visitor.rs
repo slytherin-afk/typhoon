@@ -7,9 +7,9 @@ use crate::{
         Expression,
     },
     stmt::{
-        block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
-        function_stmt::FunctionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
-        return_stmt::ReturnStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
+        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
+        if_stmt::IfStmt, print_stmt::PrintStmt, return_stmt::ReturnStmt,
+        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
     },
 };
 
@@ -52,7 +52,6 @@ trait StmtVisitor {
     fn visit_print_stmt(&mut self, stmt: PrintStmt) -> Self::Item;
     fn visit_variable_stmt(&mut self, stmt: VariableStmt) -> Self::Item;
     fn visit_block_stmt(&mut self, stmt: BlockStmt) -> Self::Item;
-    fn visit_exit_stmt(&mut self, stmt: ExitStmt) -> Self::Item;
     fn visit_if_stmt(&mut self, stmt: IfStmt) -> Self::Item;
     fn visit_while_stmt(&mut self, stmt: WhileStmt) -> Self::Item;
     fn visit_function_stmt(&mut self, stmt: FunctionStmt) -> Self::Item;
@@ -71,7 +70,6 @@ impl Stmt {
             Stmt::PrintStmt(print_stmt) => visitor.visit_print_stmt(*print_stmt),
             Stmt::VariableStmt(variable_stmt) => visitor.visit_variable_stmt(*variable_stmt),
             Stmt::BlockStmt(block_stmt) => visitor.visit_block_stmt(*block_stmt),
-            Stmt::ExitStmt(exit_stmt) => visitor.visit_exit_stmt(*exit_stmt),
             Stmt::IfStmt(if_stmt) => visitor.visit_if_stmt(*if_stmt),
             Stmt::WhileStmt(while_stmt) => visitor.visit_while_stmt(*while_stmt),
             Stmt::FunctionStmt(function_stmt) => visitor.visit_function_stmt(*function_stmt),

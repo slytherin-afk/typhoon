@@ -1,87 +1,6 @@
-use std::rc::Rc;
-
 use super::RuntimeError;
-use crate::{
-    object::Object,
-    scanner::{token::Token, token_type::TokenType},
-};
-
-pub fn handle_addition(
-    left: &Object,
-    right: &Object,
-    operator: &Token,
-) -> Result<Object, RuntimeError> {
-    validate_addition_operands(&left, &right, &operator)?;
-
-    match (left, right) {
-        (Object::String(l), Object::String(r)) => return Ok(Object::String(format!("{l}{r}"))),
-        _ => {
-            let result = to_number(left) + to_number(right);
-
-            return Ok(Object::Number(result));
-        }
-    };
-}
-
-pub fn handle_arithmetic(
-    left: &Object,
-    right: &Object,
-    operator: &Token,
-) -> Result<Object, RuntimeError> {
-    validate_arithmetic_operands(left, right, operator)?;
-
-    let left_number = to_number(left);
-    let right_number = to_number(right);
-    let value = match operator.token_type {
-        TokenType::Minus => left_number - right_number,
-        TokenType::Star => left_number * right_number,
-        TokenType::Slash => {
-            if right_number == 0.0 {
-                return Err(RuntimeError::new(
-                    operator.clone(),
-                    "Not divisible by Zero".to_string(),
-                ));
-            } else {
-                left_number / right_number
-            }
-        }
-        _ => unreachable!(),
-    };
-
-    Ok(Object::Number(value))
-}
-
-pub fn handle_comparison(
-    left: &Object,
-    right: &Object,
-    operator: &Token,
-) -> Result<Object, RuntimeError> {
-    validate_addition_operands(&left, &right, &operator)?;
-
-    let value = match (left, right) {
-        (Object::String(l), Object::String(r)) => match operator.token_type {
-            TokenType::Greater => l > r,
-            TokenType::GreaterEqual => l >= r,
-            TokenType::Less => l < r,
-            TokenType::LessEqual => l <= r,
-            _ => unreachable!(),
-        },
-        _ => {
-            let l = to_number(left);
-            let r = to_number(right);
-
-            match operator.token_type {
-                TokenType::Greater => l > r,
-                TokenType::GreaterEqual => l >= r,
-                TokenType::Less => l < r,
-                TokenType::LessEqual => l <= r,
-                _ => unreachable!(),
-            }
-        }
-    };
-
-    Ok(Object::Boolean(value))
-}
+use crate::{object::Object, scanner::token::Token};
+use std::rc::Rc;
 
 impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
@@ -98,44 +17,181 @@ impl PartialEq for Object {
     }
 }
 
-pub fn validate_addition_operands(
+pub fn handle_addition(
     left: &Object,
     right: &Object,
     operator: &Token,
-) -> Result<(), RuntimeError> {
-    match (left, right) {
-        (Object::Number(_), Object::Number(_))
-        | (Object::Number(_), Object::Boolean(_))
-        | (Object::Boolean(_), Object::Number(_))
-        | (Object::String(_), Object::String(_)) => Ok(()),
+) -> Result<Object, RuntimeError> {
+    let value = match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Object::Number(l + r),
+        (Object::Number(l), Object::String(r)) => Object::String(format!("{l}{r}")),
+        (Object::Number(l), Object::Boolean(r)) => Object::Number(l + bool_to_number(*r)),
+        (Object::String(l), Object::Number(r)) => Object::String(format!("{l}{r}")),
+        (Object::String(l), Object::String(r)) => Object::String(format!("{l}{r}")),
+        (Object::Boolean(l), Object::Number(r)) => Object::Number(bool_to_number(*l) + r),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Object::Number(bool_to_number(*l) + bool_to_number(*r))
+        }
         _ => Err(RuntimeError::new(
             operator.clone(),
             "Operands must be (numbers or booleans) or two strings".to_string(),
-        )),
-    }
+        ))?,
+    };
+
+    Ok(value)
 }
 
-pub fn validate_arithmetic_operands(
+pub fn handle_subtraction(
     left: &Object,
     right: &Object,
     operator: &Token,
-) -> Result<(), RuntimeError> {
-    match (left, right) {
-        (Object::Number(_), Object::Number(_))
-        | (Object::Number(_), Object::Boolean(_))
-        | (Object::Boolean(_), Object::Number(_)) => Ok(()),
+) -> Result<Object, RuntimeError> {
+    let value = match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Object::Number(l - r),
+        (Object::Number(l), Object::Boolean(r)) => Object::Number(l - bool_to_number(*r)),
+        (Object::Boolean(l), Object::Number(r)) => Object::Number(bool_to_number(*l) - r),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Object::Number(bool_to_number(*l) - bool_to_number(*r))
+        }
         _ => Err(RuntimeError::new(
             operator.clone(),
             "Operands must be numbers or booleans".to_string(),
+        ))?,
+    };
+
+    Ok(value)
+}
+
+pub fn handle_multiplication(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    let value = match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Object::Number(l * r),
+        (Object::Number(l), Object::Boolean(r)) => Object::Number(l * bool_to_number(*r)),
+        (Object::Boolean(l), Object::Number(r)) => Object::Number(bool_to_number(*l) * r),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Object::Number(bool_to_number(*l) * bool_to_number(*r))
+        }
+        _ => Err(RuntimeError::new(
+            operator.clone(),
+            "Operands must be numbers or booleans".to_string(),
+        ))?,
+    };
+
+    Ok(value)
+}
+
+pub fn handle_division(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    let divide = |l, r| {
+        if r == 0.0 {
+            Err(RuntimeError::new(
+                operator.clone(),
+                "Divide by zero".to_string(),
+            ))
+        } else {
+            Ok(l / r)
+        }
+    };
+
+    let value = match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Object::Number(divide(*l, *r)?),
+        (Object::Number(l), Object::Boolean(r)) => Object::Number(divide(*l, bool_to_number(*r))?),
+        (Object::Boolean(l), Object::Number(r)) => Object::Number(divide(bool_to_number(*l), *r)?),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Object::Number(divide(bool_to_number(*l), bool_to_number(*r))?)
+        }
+        _ => Err(RuntimeError::new(
+            operator.clone(),
+            "Operands must be numbers or booleans".to_string(),
+        ))?,
+    };
+
+    Ok(value)
+}
+
+pub fn handle_less_than(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Ok(Object::Boolean(l < r)),
+        (Object::Number(l), Object::Boolean(r)) => Ok(Object::Boolean(*l < bool_to_number(*r))),
+        (Object::Boolean(l), Object::Number(r)) => Ok(Object::Boolean(bool_to_number(*l) < *r)),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Ok(Object::Boolean(bool_to_number(*l) < bool_to_number(*r)))
+        }
+        (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l < r)),
+        _ => Err(RuntimeError::new(
+            operator.clone(),
+            "Operands must be numbers, booleans, or strings".to_string(),
         )),
     }
 }
 
-pub fn to_number(value: &Object) -> f64 {
-    match value {
-        Object::Number(n) => *n,
-        Object::Boolean(b) => bool_to_number(*b),
-        _ => unreachable!(),
+pub fn handle_greater_than(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Ok(Object::Boolean(l > r)),
+        (Object::Number(l), Object::Boolean(r)) => Ok(Object::Boolean(*l > bool_to_number(*r))),
+        (Object::Boolean(l), Object::Number(r)) => Ok(Object::Boolean(bool_to_number(*l) > *r)),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Ok(Object::Boolean(bool_to_number(*l) > bool_to_number(*r)))
+        }
+        (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l > r)),
+        _ => Err(RuntimeError::new(
+            operator.clone(),
+            "Operands must be numbers, booleans, or strings".to_string(),
+        )),
+    }
+}
+
+pub fn handle_less_than_equal(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Ok(Object::Boolean(l <= r)),
+        (Object::Number(l), Object::Boolean(r)) => Ok(Object::Boolean(*l <= bool_to_number(*r))),
+        (Object::Boolean(l), Object::Number(r)) => Ok(Object::Boolean(bool_to_number(*l) <= *r)),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Ok(Object::Boolean(bool_to_number(*l) <= bool_to_number(*r)))
+        }
+        (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l <= r)),
+        _ => Err(RuntimeError::new(
+            operator.clone(),
+            "Operands must be numbers, booleans, or strings".to_string(),
+        )),
+    }
+}
+
+pub fn handle_greater_than_equal(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Ok(Object::Boolean(l >= r)),
+        (Object::Number(l), Object::Boolean(r)) => Ok(Object::Boolean(*l >= bool_to_number(*r))),
+        (Object::Boolean(l), Object::Number(r)) => Ok(Object::Boolean(bool_to_number(*l) >= *r)),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Ok(Object::Boolean(bool_to_number(*l) >= bool_to_number(*r)))
+        }
+        (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l >= r)),
+        _ => Err(RuntimeError::new(
+            operator.clone(),
+            "Operands must be numbers, booleans, or strings".to_string(),
+        )),
     }
 }
 

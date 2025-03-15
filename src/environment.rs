@@ -2,7 +2,7 @@ use crate::{object::Object, scanner::token::Token, visitor::interpreter::Runtime
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Environment {
-    values: HashMap<String, Object>,
+    values: HashMap<String, Rc<Object>>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -14,9 +14,9 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, token: Token) -> Result<Object, RuntimeError> {
+    pub fn get(&self, token: Token) -> Result<Rc<Object>, RuntimeError> {
         if let Some(obj) = self.values.get(&token.lexeme) {
-            Ok(obj.clone())
+            Ok(Rc::clone(obj))
         } else if let Some(env) = &self.enclosing {
             env.borrow().get(token)
         } else {
@@ -27,7 +27,7 @@ impl Environment {
         }
     }
 
-    pub fn assign(&mut self, token: Token, value: Object) -> Result<(), RuntimeError> {
+    pub fn assign(&mut self, token: Token, value: Rc<Object>) -> Result<(), RuntimeError> {
         if self.values.contains_key(&token.lexeme) {
             self.values.insert(token.lexeme, value);
 
@@ -42,7 +42,7 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: String, value: Object) -> &mut Self {
+    pub fn define(&mut self, name: String, value: Rc<Object>) -> &mut Self {
         self.values.insert(name, value);
         self
     }

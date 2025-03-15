@@ -14,15 +14,15 @@ use crate::{
     object::Object,
     scanner::{token::Token, token_type::TokenType},
     stmt::{
-        block_stmt::BlockStmt, exit_stmt::ExitStmt, expression_stmt::ExpressionStmt,
-        function_stmt::FunctionStmt, if_stmt::IfStmt, print_stmt::PrintStmt,
-        return_stmt::ReturnStmt, variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
+        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
+        if_stmt::IfStmt, print_stmt::PrintStmt, return_stmt::ReturnStmt,
+        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
     },
     Lib,
 };
 use function::Function;
 use globals::Clock;
-use std::{cell::RefCell, process::exit, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 pub struct RuntimeError {
     token: Token,
@@ -49,7 +49,7 @@ pub struct ContinueException;
 
 pub enum Exception {
     RuntimeError(RuntimeError),
-    ReturnException(Object),
+    ReturnException(Rc<Object>),
     BreakException,
     ContinueException,
 }
@@ -63,9 +63,10 @@ impl Interpreter {
     pub fn new() -> Self {
         let globals = Rc::new(RefCell::new(Environment::new(None)));
 
-        globals
-            .borrow_mut()
-            .define("clock".to_string(), Object::Callable(Rc::new(Clock)));
+        globals.borrow_mut().define(
+            "clock".to_string(),
+            Rc::new(Object::Callable(Rc::new(Clock))),
+        );
 
         Self {
             environment: Rc::clone(&globals),
@@ -84,11 +85,11 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, expr: Expression) -> Result<Object, RuntimeError> {
+    fn evaluate(&mut self, expr: Expression) -> Result<Rc<Object>, RuntimeError> {
         expr.accept(self)
     }
 
-    fn evaluate_and_map_error(&mut self, expr: Expression) -> Result<Object, Exception> {
+    fn evaluate_and_map_error(&mut self, expr: Expression) -> Result<Rc<Object>, Exception> {
         self.evaluate(expr).map_err(|e| Exception::RuntimeError(e))
     }
 
@@ -119,7 +120,7 @@ impl Interpreter {
 }
 
 impl ExpressionVisitor for Interpreter {
-    type Item = Result<Object, RuntimeError>;
+    type Item = Result<Rc<Object>, RuntimeError>;
 
     fn visit_comma(&mut self, expr: Comma) -> Self::Item {
         self.evaluate(expr.left)?;
@@ -173,20 +174,25 @@ impl ExpressionVisitor for Interpreter {
     fn visit_binary(&mut self, expr: Binary) -> Self::Item {
         let left = self.evaluate(expr.left)?;
         let right = self.evaluate(expr.right)?;
-
-        match &expr.operator.token_type {
+        let value = match expr.operator.token_type {
             TokenType::Plus => operations::handle_addition(&left, &right, &expr.operator),
-            TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                operations::handle_arithmetic(&left, &right, &expr.operator)
+            TokenType::Minus => operations::handle_subtraction(&left, &right, &expr.operator),
+            TokenType::Star => operations::handle_multiplication(&left, &right, &expr.operator),
+            TokenType::Slash => operations::handle_division(&left, &right, &expr.operator),
+            TokenType::Greater => operations::handle_greater_than(&left, &right, &expr.operator),
+            TokenType::GreaterEqual => {
+                operations::handle_greater_than_equal(&left, &right, &expr.operator)
             }
-            TokenType::Greater
-            | TokenType::GreaterEqual
-            | TokenType::Less
-            | TokenType::LessEqual => operations::handle_comparison(&left, &right, &expr.operator),
+            TokenType::Less => operations::handle_less_than(&left, &right, &expr.operator),
+            TokenType::LessEqual => {
+                operations::handle_less_than_equal(&left, &right, &expr.operator)
+            }
             TokenType::BangEqual => Ok(Object::Boolean(left != right)),
             TokenType::EqualEqual => Ok(Object::Boolean(left == right)),
             _ => unreachable!(),
-        }
+        }?;
+
+        Ok(Rc::new(value))
     }
 
     fn visit_unary(&mut self, expr: Unary) -> Self::Item {
@@ -194,7 +200,7 @@ impl ExpressionVisitor for Interpreter {
         let literal = match expr.operator.token_type {
             TokenType::Bang => Object::Boolean(!operations::is_truthy(&literal)),
             TokenType::Minus => {
-                let literal = match literal {
+                let literal = match *literal {
                     Object::Number(number) => number,
                     Object::Boolean(boolean) => operations::bool_to_number(boolean),
                     _ => {
@@ -210,7 +216,7 @@ impl ExpressionVisitor for Interpreter {
             _ => unreachable!(),
         };
 
-        Ok(literal)
+        Ok(Rc::new(literal))
     }
 
     fn visit_call(&mut self, expr: Call) -> Self::Item {
@@ -221,7 +227,7 @@ impl ExpressionVisitor for Interpreter {
             .map(|f| self.evaluate(f))
             .collect::<Result<Vec<_>, _>>()?;
 
-        match callee {
+        match &*callee {
             Object::Callable(c) => {
                 let arity = c.arity();
 
@@ -246,7 +252,7 @@ impl ExpressionVisitor for Interpreter {
     }
 
     fn visit_literal(&mut self, expr: Literal) -> Self::Item {
-        Ok(expr.value)
+        Ok(Rc::new(expr.value))
     }
 
     fn visit_variable(&mut self, expr: Variable) -> Self::Item {
@@ -262,7 +268,7 @@ impl StmtVisitor for Interpreter {
             let value = if let Some(expr) = var.initializer {
                 self.evaluate_and_map_error(expr)?
             } else {
-                Object::Undefined
+                Rc::new(Object::Undefined)
             };
 
             self.environment
@@ -279,7 +285,7 @@ impl StmtVisitor for Interpreter {
 
         self.environment
             .borrow_mut()
-            .define(name, Object::Callable(Rc::new(function)));
+            .define(name, Rc::new(Object::Callable(Rc::new(function))));
 
         Ok(())
     }
@@ -288,14 +294,14 @@ impl StmtVisitor for Interpreter {
         let value = if let Some(value) = stmt.value {
             self.evaluate_and_map_error(value)?
         } else {
-            Object::Undefined
+            Rc::new(Object::Undefined)
         };
 
         Err(Exception::ReturnException(value))
     }
 
     fn visit_while_stmt(&mut self, stmt: WhileStmt) -> Self::Item {
-        while operations::is_truthy(&self.evaluate_and_map_error(stmt.condition.clone())?) {
+        while operations::is_truthy(&*self.evaluate_and_map_error(stmt.condition.clone())?) {
             let result = self.execute(stmt.body.clone());
 
             if let Err(e) = &result {
@@ -337,25 +343,6 @@ impl StmtVisitor for Interpreter {
         println!("{}", value);
 
         Ok(())
-    }
-
-    fn visit_exit_stmt(&mut self, stmt: ExitStmt) -> Self::Item {
-        let exit_code = match stmt.expression {
-            Some(expression) => {
-                let value = self.evaluate_and_map_error(expression)?;
-                match value {
-                    Object::Number(_) | Object::Boolean(_) => operations::to_number(&value) as i32,
-                    _ => {
-                        println!("{value}");
-
-                        1
-                    }
-                }
-            }
-            None => 0,
-        };
-
-        exit(exit_code);
     }
 
     fn visit_expression_stmt(&mut self, stmt: ExpressionStmt) -> Self::Item {

@@ -11,7 +11,6 @@ use crate::{
     },
     stmt::{
         block_stmt::BlockStmt,
-        exit_stmt::ExitStmt,
         expression_stmt::ExpressionStmt,
         function_stmt::FunctionStmt,
         if_stmt::IfStmt,
@@ -117,8 +116,6 @@ impl Parser {
             self.for_stmt()
         } else if self.matches(&[TokenType::Print]) {
             self.print_stmt()
-        } else if self.matches(&[TokenType::Exit]) {
-            self.exit_stmt()
         } else if self.matches(&[TokenType::LeftBraces]) {
             Ok(Stmt::BlockStmt(Box::new(BlockStmt {
                 stmts: self.block_stmt()?,
@@ -356,20 +353,6 @@ impl Parser {
         self.consume(&TokenType::SemiColon, "Expect a ';' at the end of print")?;
 
         Ok(Stmt::PrintStmt(Box::new(PrintStmt { expression })))
-    }
-
-    fn exit_stmt(&mut self) -> Result<Stmt, ParseError> {
-        if self.matches(&[TokenType::SemiColon]) {
-            return Ok(Stmt::ExitStmt(Box::new(ExitStmt { expression: None })));
-        }
-
-        let expression = self.expression()?;
-
-        self.consume(&TokenType::SemiColon, "Expect a ';' at the end of exit")?;
-
-        Ok(Stmt::ExitStmt(Box::new(ExitStmt {
-            expression: Some(expression),
-        })))
     }
 
     fn expr_stmt(&mut self) -> Result<Stmt, ParseError> {

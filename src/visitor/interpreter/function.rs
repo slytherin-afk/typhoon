@@ -14,8 +14,8 @@ impl Callable for Function {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        arguments: Vec<Object>,
-    ) -> Result<Object, RuntimeError> {
+        arguments: Vec<Rc<Object>>,
+    ) -> Result<Rc<Object>, RuntimeError> {
         let mut env = Environment::new(Some(Rc::clone(&interpreter.globals)));
 
         for (i, arg) in arguments.into_iter().enumerate() {
@@ -29,7 +29,7 @@ impl Callable for Function {
                 _ => unreachable!(),
             }
         } else {
-            Ok(Object::Undefined)
+            Ok(Rc::new(Object::Undefined))
         }
     }
 
