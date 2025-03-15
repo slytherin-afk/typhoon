@@ -1,13 +1,13 @@
 use super::{callable::Callable, Exception, Interpreter, RuntimeError};
-use crate::{environment::Environment, object::Object, stmt::function_stmt::FunctionStmt};
+use crate::{environment::Environment, expression::lambda::Lambda, object::Object};
 use std::{cell::RefCell, rc::Rc};
 
-pub struct Function {
-    pub declaration: FunctionStmt,
+pub struct LambdaFunction {
+    pub declaration: Lambda,
     pub closure: Rc<RefCell<Environment>>,
 }
 
-impl Callable for Function {
+impl Callable for LambdaFunction {
     fn arity(&self) -> usize {
         self.declaration.params.len()
     }
@@ -20,7 +20,7 @@ impl Callable for Function {
         let mut env = Environment::new(Some(Rc::clone(&self.closure)));
 
         for (i, arg) in arguments.into_iter().enumerate() {
-            env.define(self.declaration.params[i].lexeme.to_string(), arg);
+            env.define(String::clone(&self.declaration.params[i].lexeme), arg);
         }
 
         if let Err(err) = interpreter.execute_block(self.declaration.body.clone(), env) {
@@ -35,6 +35,6 @@ impl Callable for Function {
     }
 
     fn to_string(&self) -> String {
-        format!("[Function: {}]", self.declaration.name.lexeme)
+        String::from("[Function: (anonymous)]")
     }
 }

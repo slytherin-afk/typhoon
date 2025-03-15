@@ -1,6 +1,5 @@
-use std::{fmt, rc::Rc};
-
 use crate::visitor::interpreter::callable::Callable;
+use std::{fmt, rc::Rc};
 
 #[derive(Clone)]
 pub enum Object {

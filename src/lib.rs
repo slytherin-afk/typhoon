@@ -55,14 +55,12 @@ impl Lib {
             return;
         }
 
-        let parser = Parser::new(tokens);
+        let mut parser = Parser::new(tokens);
         let statements = parser.parse();
 
         if unsafe { HAD_ERROR } {
             return;
         }
-
-        let statements = statements.expect("got valid statements");
 
         self.interpreter.interpret(statements);
     }
