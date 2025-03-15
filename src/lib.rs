@@ -51,10 +51,6 @@ impl Lib {
         let scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens();
 
-        // for t in &tokens {
-        //     println!("{} {}", t.line, t.lexeme);
-        // }
-
         if unsafe { HAD_ERROR } {
             return;
         }
