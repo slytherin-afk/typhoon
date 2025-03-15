@@ -55,7 +55,7 @@ pub enum Exception {
 }
 
 pub struct Interpreter {
-    globals: Rc<RefCell<Environment>>,
+    _globals: Rc<RefCell<Environment>>,
     environment: Rc<RefCell<Environment>>,
 }
 
@@ -70,7 +70,7 @@ impl Interpreter {
 
         Self {
             environment: Rc::clone(&globals),
-            globals,
+            _globals: globals,
         }
     }
 
@@ -281,7 +281,10 @@ impl StmtVisitor for Interpreter {
 
     fn visit_function_stmt(&mut self, stmt: FunctionStmt) -> Self::Item {
         let name = stmt.name.lexeme.to_string();
-        let function = Function { declaration: stmt };
+        let function = Function {
+            declaration: stmt,
+            closure: Rc::clone(&self.environment),
+        };
 
         self.environment
             .borrow_mut()

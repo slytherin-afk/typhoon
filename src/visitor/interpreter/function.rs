@@ -1,9 +1,10 @@
 use super::{callable::Callable, Exception, Interpreter, RuntimeError};
 use crate::{environment::Environment, object::Object, stmt::function_stmt::FunctionStmt};
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 pub struct Function {
     pub declaration: FunctionStmt,
+    pub closure: Rc<RefCell<Environment>>,
 }
 
 impl Callable for Function {
@@ -16,7 +17,7 @@ impl Callable for Function {
         interpreter: &mut Interpreter,
         arguments: Vec<Rc<Object>>,
     ) -> Result<Rc<Object>, RuntimeError> {
-        let mut env = Environment::new(Some(Rc::clone(&interpreter.globals)));
+        let mut env = Environment::new(Some(Rc::clone(&self.closure)));
 
         for (i, arg) in arguments.into_iter().enumerate() {
             env.define(self.declaration.params[i].lexeme.to_string(), arg);
