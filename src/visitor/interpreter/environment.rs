@@ -14,7 +14,7 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, token: Token) -> Result<Rc<Object>, RuntimeError> {
+    pub fn get(&self, token: &Token) -> Result<Rc<Object>, RuntimeError> {
         if let Some(obj) = self.values.get(&token.lexeme) {
             Ok(Rc::clone(obj))
         } else if let Some(env) = &self.enclosing {
@@ -27,9 +27,9 @@ impl Environment {
         }
     }
 
-    pub fn assign(&mut self, token: Token, value: Rc<Object>) -> Result<(), RuntimeError> {
+    pub fn assign(&mut self, token: &Token, value: Rc<Object>) -> Result<(), RuntimeError> {
         if self.values.contains_key(&token.lexeme) {
-            self.values.insert(token.lexeme, value);
+            self.values.insert(String::clone(&token.lexeme), value);
 
             Ok(())
         } else if let Some(env) = &mut self.enclosing {
@@ -42,8 +42,8 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: String, value: Rc<Object>) -> &mut Self {
-        self.values.insert(name, value);
+    pub fn define(&mut self, name: &str, value: Rc<Object>) -> &mut Self {
+        self.values.insert(String::from(name), value);
         self
     }
 }

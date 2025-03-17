@@ -1,4 +1,3 @@
-pub mod environment;
 pub mod expression;
 pub mod object;
 pub mod parser;
@@ -62,7 +61,7 @@ impl Lib {
             return;
         }
 
-        self.interpreter.interpret(statements);
+        self.interpreter.interpret(&statements);
     }
 
     pub fn error_one(line: usize, message: &str) {
