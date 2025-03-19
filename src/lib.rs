@@ -1,10 +1,12 @@
 pub mod expression;
 pub mod object;
 pub mod parser;
+pub mod resolvable_function;
 pub mod scanner;
 pub mod stmt;
 pub mod visitor;
 
+use colored::Colorize;
 use parser::Parser;
 use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
@@ -91,8 +93,8 @@ impl Lib {
     pub fn runtime_error(runtime_error: &RuntimeError) {
         println!(
             "[{}] {}",
-            runtime_error.token().line,
-            runtime_error.message()
+            runtime_error.token().line.to_string().bold().blue(),
+            runtime_error.message().bright_red()
         );
 
         unsafe {
@@ -101,10 +103,35 @@ impl Lib {
     }
 
     fn report(line: usize, wheres: &str, message: &str) {
-        println!("[{line}] Error {wheres}: {message}");
+        println!(
+            "{} {} {}: {}",
+            format!("[{}]", line).bold().blue(),
+            "Error:".bold().red(),
+            wheres.yellow(),
+            message.bright_white()
+        );
 
         unsafe {
             HAD_ERROR = true;
         }
+    }
+
+    pub fn warn_two(token: &Token, message: &str) {
+        if token.token_type == TokenType::Eof {
+            Lib::report_warning(token.line, "at end", message);
+        } else {
+            let wheres = format!("at '{}'", token.lexeme);
+            Lib::report_warning(token.line, &wheres, message);
+        }
+    }
+
+    fn report_warning(line: usize, wheres: &str, message: &str) {
+        println!(
+            "{} {} {}: {}",
+            format!("[{}]", line).bold().blue(),
+            "Warning".truecolor(199, 79, 25).bold(),
+            wheres.yellow(),
+            message.bright_white()
+        );
     }
 }

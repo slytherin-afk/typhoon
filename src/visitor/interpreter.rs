@@ -2,7 +2,6 @@ pub mod callable;
 pub mod environment;
 pub mod function;
 pub mod globals;
-pub mod lambda;
 pub mod operations;
 
 use super::{ExpressionVisitor, StmtVisitor};
@@ -24,7 +23,6 @@ use crate::{
 use environment::Environment;
 use function::Function;
 use globals::Clock;
-use lambda::LambdaFunction;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct RuntimeError {
@@ -277,7 +275,7 @@ impl ExpressionVisitor for Interpreter {
     }
 
     fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
-        let function = LambdaFunction {
+        let function = Function {
             declaration: expr.clone(),
             closure: Rc::clone(&self.environment),
         };

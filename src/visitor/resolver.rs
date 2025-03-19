@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use super::{interpreter::Interpreter, ExpressionVisitor, StmtVisitor};
 use crate::{
     expression::{
@@ -7,6 +5,7 @@ use crate::{
         lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
         variable::Variable, Expression,
     },
+    resolvable_function::ResolvableFunction,
     scanner::token::Token,
     stmt::{
         block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
@@ -15,27 +14,24 @@ use crate::{
     },
     Lib,
 };
-
-#[derive(Clone)]
-enum FunctionType {
-    None,
-    Function,
-}
+use std::collections::HashMap;
 
 pub struct Resolver<'a> {
-    current_function: FunctionType,
-    loop_depth: usize,
-    scopes: Vec<HashMap<String, bool>>,
     interpreter: &'a mut Interpreter,
+    scopes: Vec<HashMap<String, bool>>,
+    unused_variables: Vec<HashMap<String, Token>>,
+    loop_depth: usize,
+    function_depth: usize,
 }
 
 impl<'a> Resolver<'a> {
     pub fn new(interpreter: &'a mut Interpreter) -> Self {
         Self {
-            current_function: FunctionType::None,
-            loop_depth: 0,
-            scopes: vec![],
             interpreter,
+            scopes: vec![],
+            unused_variables: vec![],
+            loop_depth: 0,
+            function_depth: 0,
         }
     }
 
@@ -53,24 +49,24 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(&mut self, function: &FunctionStmt, function_type: FunctionType) {
-        let enclosing = self.current_function.clone();
-        self.current_function = function_type;
+    fn resolve_function<T: ResolvableFunction>(&mut self, function: &T) {
+        self.function_depth += 1;
         self.begin_scope();
 
-        for param in &function.params {
+        for param in function.params() {
             self.declare(param);
             self.define(param);
         }
 
-        self.resolve_stmts(&function.body);
+        self.resolve_stmts(function.body());
         self.end_scope();
-        self.current_function = enclosing;
+        self.function_depth -= 1;
     }
 
     fn resolve_local(&mut self, name: &Token) {
         for i in (0..self.scopes.len()).rev() {
             if self.scopes[i].contains_key(&name.lexeme) {
+                self.unused_variables[i].remove(&name.lexeme);
                 self.interpreter.resolve(
                     &name.identifier_hash.as_ref().unwrap(),
                     self.scopes.len() - 1 - i,
@@ -80,25 +76,29 @@ impl<'a> Resolver<'a> {
     }
 
     fn begin_scope(&mut self) {
+        self.unused_variables.push(HashMap::new());
         self.scopes.push(HashMap::new());
     }
 
     fn end_scope(&mut self) {
+        if let Some(unused_vars) = self.unused_variables.pop() {
+            for unused in unused_vars.into_values() {
+                Lib::warn_two(&unused, "Unused variable");
+            }
+        }
+
         self.scopes.pop();
-    }
-
-    fn begin_loop(&mut self) {
-        self.loop_depth += 1;
-    }
-
-    fn end_loop(&mut self) {
-        self.loop_depth -= 1;
     }
 
     fn declare(&mut self, name: &Token) {
         if self.scopes.is_empty() {
             return;
         }
+
+        self.unused_variables
+            .last_mut()
+            .unwrap()
+            .insert(String::from(&name.lexeme), name.clone());
 
         self.scopes
             .last_mut()
@@ -179,7 +179,7 @@ impl<'a> ExpressionVisitor for Resolver<'a> {
     }
 
     fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
-        self.resolve_stmts(&expr.body);
+        self.resolve_function(expr);
     }
 }
 
@@ -222,24 +222,20 @@ impl<'a> StmtVisitor for Resolver<'a> {
     }
 
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Item {
-        self.begin_loop();
+        self.loop_depth += 1;
         self.resolve_expression(&stmt.condition);
         self.resolve_stmt(&stmt.body);
-        self.end_loop();
+        self.loop_depth -= 1;
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item {
-        if self.loop_depth != 0 {
-            Lib::error_two(&stmt.name, "Can't define function inside a loop");
-        }
-
         self.declare(&stmt.name);
         self.define(&stmt.name);
-        self.resolve_function(stmt, FunctionType::Function);
+        self.resolve_function(stmt);
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Item {
-        if !matches!(self.current_function, FunctionType::Function) {
+        if self.function_depth == 0 {
             Lib::error_two(&stmt.keyword, "Can't use return outside a function");
         }
 
@@ -251,12 +247,16 @@ impl<'a> StmtVisitor for Resolver<'a> {
     fn visit_continue_stmt(&mut self, keyword: &Token) -> Self::Item {
         if self.loop_depth == 0 {
             Lib::error_two(keyword, "Can't use continue outside a loop");
+        } else if self.function_depth >= self.loop_depth {
+            Lib::error_two(keyword, "Jump target cannot cross function boundary");
         }
     }
 
     fn visit_break_stmt(&mut self, keyword: &Token) -> Self::Item {
         if self.loop_depth == 0 {
             Lib::error_two(keyword, "Can't use break outside a loop");
+        } else if self.function_depth >= self.loop_depth {
+            Lib::error_two(keyword, "Jump target cannot cross function boundary");
         }
     }
 

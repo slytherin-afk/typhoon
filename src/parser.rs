@@ -345,6 +345,8 @@ impl Parser {
     }
 
     fn lambda(&mut self) -> Result<Expression, ParseError> {
+        let name = self.previous().clone();
+
         self.consume(
             &TokenType::LeftParenthesis,
             &format!("Expect '(' after anonymous function name"),
@@ -385,7 +387,7 @@ impl Parser {
 
         let body = self.block_stmt()?;
 
-        Ok(Expression::Lambda(Box::new(Lambda { params, body })))
+        Ok(Expression::Lambda(Box::new(Lambda { name, params, body })))
     }
 
     fn assignment(&mut self) -> Result<Expression, ParseError> {
