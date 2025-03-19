@@ -25,7 +25,7 @@ use environment::Environment;
 use function::Function;
 use globals::Clock;
 use lambda::LambdaFunction;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct RuntimeError {
     token: Token,
@@ -58,8 +58,9 @@ pub enum Exception {
 }
 
 pub struct Interpreter {
-    _globals: Rc<RefCell<Environment>>,
+    globals: Rc<RefCell<Environment>>,
     environment: Rc<RefCell<Environment>>,
+    locals: HashMap<String, usize>,
 }
 
 impl Interpreter {
@@ -72,7 +73,8 @@ impl Interpreter {
 
         Self {
             environment: Rc::clone(&globals),
-            _globals: globals,
+            globals,
+            locals: HashMap::new(),
         }
     }
 
@@ -110,6 +112,19 @@ impl Interpreter {
 
         result
     }
+
+    pub fn resolve(&mut self, hash: &str, depth: usize) {
+        self.locals.insert(String::from(hash), depth);
+    }
+
+    fn look_up_variable(&mut self, name: &Token) -> Result<Rc<Object>, RuntimeError> {
+        let distance = self.locals.get(name.identifier_hash.as_ref().unwrap());
+
+        match distance {
+            Some(depth) => self.environment.borrow().get_at(name, *depth),
+            None => self.globals.borrow().get(&name),
+        }
+    }
 }
 
 impl ExpressionVisitor for Interpreter {
@@ -122,10 +137,19 @@ impl ExpressionVisitor for Interpreter {
 
     fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item {
         let value = self.evaluate(&expr.expression)?;
+        let distance = self.locals.get(expr.name.identifier_hash.as_ref().unwrap());
 
-        self.environment
-            .borrow_mut()
-            .assign(&expr.name, value.clone())?;
+        match distance {
+            Some(depth) => {
+                self.environment
+                    .borrow_mut()
+                    .assign_at(&expr.name, Rc::clone(&value), *depth)?
+            }
+            None => self
+                .globals
+                .borrow_mut()
+                .assign(&expr.name, Rc::clone(&value))?,
+        };
 
         Ok(value)
     }
@@ -249,7 +273,7 @@ impl ExpressionVisitor for Interpreter {
     }
 
     fn visit_variable(&mut self, expr: &Variable) -> Self::Item {
-        self.environment.borrow().get(&expr.name)
+        return self.look_up_variable(&expr.name);
     }
 
     fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
@@ -272,10 +296,6 @@ impl StmtVisitor for Interpreter {
             } else {
                 Rc::new(Object::Undefined)
             };
-
-            self.environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
-                &self.environment,
-            )))));
 
             self.environment
                 .borrow_mut()
@@ -360,15 +380,15 @@ impl StmtVisitor for Interpreter {
         Ok(())
     }
 
-    fn visit_empty_stmt(&mut self) -> Self::Item {
-        Ok(())
-    }
-
-    fn visit_continue_stmt(&mut self) -> Self::Item {
+    fn visit_continue_stmt(&mut self, _: &Token) -> Self::Item {
         Err(Exception::ContinueException)
     }
 
-    fn visit_break_stmt(&mut self) -> Self::Item {
+    fn visit_break_stmt(&mut self, _: &Token) -> Self::Item {
         Err(Exception::BreakException)
+    }
+
+    fn visit_empty_stmt(&mut self) -> Self::Item {
+        Ok(())
     }
 }

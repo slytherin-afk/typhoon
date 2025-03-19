@@ -12,6 +12,7 @@ pub struct Token {
     pub lexeme: String,
     pub literal: Option<LiteralType>,
     pub line: usize,
+    pub identifier_hash: Option<String>,
 }
 
 impl Token {
@@ -20,12 +21,14 @@ impl Token {
         lexeme: String,
         literal: Option<LiteralType>,
         line: usize,
+        identifier_hash: Option<String>,
     ) -> Self {
         Self {
             token_type,
             lexeme,
             literal,
             line,
+            identifier_hash,
         }
     }
 }

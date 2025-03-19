@@ -1,4 +1,4 @@
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Hash)]
 pub enum TokenType {
     LeftParenthesis,
     RightParenthesis,

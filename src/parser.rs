@@ -26,8 +26,6 @@ use crate::{
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
-    loop_depth: usize,
-    function_depth: usize,
 }
 
 #[derive(Debug)]
@@ -35,12 +33,7 @@ pub struct ParseError;
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            current: 0,
-            loop_depth: 0,
-            function_depth: 0,
-        }
+        Self { tokens, current: 0 }
     }
 
     pub fn parse(&mut self) -> Vec<Stmt> {
@@ -165,8 +158,6 @@ impl Parser {
     }
 
     fn function_stmt(&mut self, kind: &str) -> Result<Stmt, ParseError> {
-        self.function_depth += 1;
-
         let name = self
             .consume(&TokenType::Identifier, &format!("Expect {kind} name"))?
             .clone();
@@ -211,8 +202,6 @@ impl Parser {
 
         let body = self.block_stmt()?;
 
-        self.function_depth -= 1;
-
         Ok(Stmt::FunctionStmt(Box::new(FunctionStmt {
             name,
             params,
@@ -221,13 +210,6 @@ impl Parser {
     }
 
     fn return_stmt(&mut self) -> Result<Stmt, ParseError> {
-        if self.function_depth == 0 {
-            return Err(Self::error(
-                self.previous(),
-                "Cannot use return outside a function",
-            ));
-        }
-
         let keyword = self.previous().clone();
         let value = if !self.check(&TokenType::SemiColon) {
             Some(self.expression()?)
@@ -244,8 +226,6 @@ impl Parser {
     }
 
     fn while_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.loop_depth += 1;
-
         self.consume(&TokenType::LeftParenthesis, "Expect a '(' after while")?;
 
         let condition = self.expression()?;
@@ -256,14 +236,11 @@ impl Parser {
         )?;
 
         let body = self.stmt()?;
-        self.loop_depth -= 1;
 
         Ok(Stmt::WhileStmt(Box::new(WhileStmt { condition, body })))
     }
 
     fn for_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.loop_depth += 1;
-
         self.consume(&TokenType::LeftParenthesis, "Expect a '(' after for")?;
 
         let initializer = if self.matches(&[TokenType::SemiColon]) {
@@ -314,32 +291,16 @@ impl Parser {
             }));
         }
 
-        self.loop_depth -= 1;
-
         Ok(body)
     }
 
     fn loop_control(&mut self) -> Result<Stmt, ParseError> {
-        let token = self.previous();
-
-        if self.loop_depth == 0 {
-            return Err(Self::error(
-                token,
-                "Cannot use break or continue outside a loop",
-            ));
-        }
-
-        if self.function_depth >= self.loop_depth {
-            return Err(Self::error(
-                token,
-                "Cannot use break or continue inside a function",
-            ));
-        }
+        let token = self.previous().clone();
 
         let result = if token.token_type == TokenType::Continue {
-            Ok(Stmt::ContinueStmt)
+            Ok(Stmt::ContinueStmt(token))
         } else {
-            Ok(Stmt::BreakStmt)
+            Ok(Stmt::BreakStmt(token))
         };
 
         self.consume(&TokenType::SemiColon, "Expected ';' at end of loop control")?;
@@ -384,8 +345,6 @@ impl Parser {
     }
 
     fn lambda(&mut self) -> Result<Expression, ParseError> {
-        self.function_depth += 1;
-
         self.consume(
             &TokenType::LeftParenthesis,
             &format!("Expect '(' after anonymous function name"),
@@ -425,8 +384,6 @@ impl Parser {
         )?;
 
         let body = self.block_stmt()?;
-
-        self.function_depth -= 1;
 
         Ok(Expression::Lambda(Box::new(Lambda { params, body })))
     }

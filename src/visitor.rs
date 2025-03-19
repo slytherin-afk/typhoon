@@ -7,6 +7,7 @@ use crate::{
         lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
         variable::Variable, Expression,
     },
+    scanner::token::Token,
     stmt::{
         block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
         if_stmt::IfStmt, print_stmt::PrintStmt, return_stmt::ReturnStmt,
@@ -60,8 +61,8 @@ trait StmtVisitor {
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item;
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Item;
     fn visit_empty_stmt(&mut self) -> Self::Item;
-    fn visit_continue_stmt(&mut self) -> Self::Item;
-    fn visit_break_stmt(&mut self) -> Self::Item;
+    fn visit_continue_stmt(&mut self, keyword: &Token) -> Self::Item;
+    fn visit_break_stmt(&mut self, keyword: &Token) -> Self::Item;
 }
 
 impl Stmt {
@@ -75,9 +76,9 @@ impl Stmt {
             Stmt::WhileStmt(while_stmt) => visitor.visit_while_stmt(while_stmt),
             Stmt::FunctionStmt(function_stmt) => visitor.visit_function_stmt(function_stmt),
             Stmt::ReturnStmt(return_stmt) => visitor.visit_return_stmt(return_stmt),
+            Stmt::ContinueStmt(keyword) => visitor.visit_continue_stmt(keyword),
+            Stmt::BreakStmt(keyword) => visitor.visit_break_stmt(keyword),
             Stmt::EmptyStmt => visitor.visit_empty_stmt(),
-            Stmt::ContinueStmt => visitor.visit_continue_stmt(),
-            Stmt::BreakStmt => visitor.visit_break_stmt(),
         }
     }
 }

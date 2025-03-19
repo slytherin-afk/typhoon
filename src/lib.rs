@@ -8,7 +8,10 @@ pub mod visitor;
 use parser::Parser;
 use rustyline::DefaultEditor;
 use scanner::{token::Token, token_type::TokenType, Scanner};
-use visitor::interpreter::{Interpreter, RuntimeError};
+use visitor::{
+    interpreter::{Interpreter, RuntimeError},
+    resolver::Resolver,
+};
 
 pub struct Lib {
     interpreter: Interpreter,
@@ -56,6 +59,14 @@ impl Lib {
 
         let mut parser = Parser::new(tokens);
         let statements = parser.parse();
+
+        if unsafe { HAD_ERROR } {
+            return;
+        }
+
+        let mut resolver = Resolver::new(&mut self.interpreter);
+
+        resolver.resolve_stmts(&statements);
 
         if unsafe { HAD_ERROR } {
             return;

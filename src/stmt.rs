@@ -16,6 +16,8 @@ use return_stmt::ReturnStmt;
 use variable_stmt::VariableStmt;
 use while_stmt::WhileStmt;
 
+use crate::scanner::token::Token;
+
 #[derive(Clone)]
 pub enum Stmt {
     ExpressionStmt(Box<ExpressionStmt>),
@@ -26,7 +28,7 @@ pub enum Stmt {
     WhileStmt(Box<WhileStmt>),
     FunctionStmt(Box<FunctionStmt>),
     ReturnStmt(Box<ReturnStmt>),
+    ContinueStmt(Token),
+    BreakStmt(Token),
     EmptyStmt,
-    ContinueStmt,
-    BreakStmt,
 }

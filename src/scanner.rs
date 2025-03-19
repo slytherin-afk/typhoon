@@ -5,6 +5,7 @@ use crate::Lib;
 use phf::phf_map;
 use token::{LiteralType, Token};
 use token_type::TokenType;
+use uuid::Uuid;
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "and" => TokenType::And,
@@ -173,6 +174,7 @@ impl Scanner {
                     self.add_token_with_literal(
                         TokenType::StringLiteral,
                         Some(LiteralType::String(String::from(literal))),
+                        None,
                     );
 
                     return;
@@ -206,7 +208,11 @@ impl Scanner {
             .parse()
             .expect("Valid number literal");
 
-        self.add_token_with_literal(TokenType::NumberLiteral, Some(LiteralType::Number(number)));
+        self.add_token_with_literal(
+            TokenType::NumberLiteral,
+            Some(LiteralType::Number(number)),
+            None,
+        );
     }
 
     fn identifier(&mut self) {
@@ -220,8 +226,9 @@ impl Scanner {
         } else {
             TokenType::Identifier
         };
+        let uuid = Uuid::new_v4().to_string();
 
-        self.add_token(token_type);
+        self.add_token_with_hash(token_type, Some(uuid));
     }
 
     fn matches(&mut self, expected: char) -> bool {
@@ -259,12 +266,27 @@ impl Scanner {
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        self.add_token_with_literal(token_type, None);
+        self.add_token_with_literal(token_type, None, None);
     }
 
-    fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<LiteralType>) {
+    fn add_token_with_hash(&mut self, token_type: TokenType, identifier_hash: Option<String>) {
+        self.add_token_with_literal(token_type, None, identifier_hash);
+    }
+
+    fn add_token_with_literal(
+        &mut self,
+        token_type: TokenType,
+        literal: Option<LiteralType>,
+        identifier_hash: Option<String>,
+    ) {
         let lexeme = &self.source[self.start..self.current];
-        let token = Token::new(token_type, String::from(lexeme), literal, self.line);
+        let token = Token::new(
+            token_type,
+            String::from(lexeme),
+            literal,
+            self.line,
+            identifier_hash,
+        );
         self.tokens.push(token);
     }
 }
