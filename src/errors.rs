@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{Object, Token};
 
 #[derive(Debug)]
@@ -7,7 +5,7 @@ pub struct ParseError;
 
 pub enum RuntimeException {
     RuntimeError(RuntimeError),
-    ReturnException(Rc<Object>),
+    ReturnException(Object),
     BreakException,
     ContinueException,
 }

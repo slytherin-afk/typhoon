@@ -5,7 +5,6 @@ pub mod operations;
 pub mod stmt;
 
 mod environment;
-mod function;
 mod interpreter;
 mod object;
 mod parser;
@@ -18,9 +17,8 @@ use colored::Colorize;
 use rustyline::DefaultEditor;
 
 pub use environment::Environment;
-pub use function::{Callable, Function, ResolvableFunction};
 pub use interpreter::Interpreter;
-pub use object::Object;
+pub use object::{Callable, Class, ClassInstance, Function, Object, ResolvableFunction};
 pub use token::{LiteralType, Token};
 pub use token_type::TokenType;
 

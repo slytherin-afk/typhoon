@@ -3,42 +3,23 @@ use crate::{expression::Expression, ResolvableFunction, Token};
 #[derive(Clone)]
 pub enum Stmt {
     EmptyStmt,
-    ExpressionStmt(Box<ExpressionStmt>),
-    PrintStmt(Box<PrintStmt>),
-    VariableStmt(Box<VariableStmt>),
-    BlockStmt(Box<BlockStmt>),
+    ExpressionStmt(Box<Expression>),
+    PrintStmt(Box<Expression>),
+    VariableStmt(Box<Vec<VariableDeclaration>>),
+    BlockStmt(Box<Vec<Stmt>>),
     IfStmt(Box<IfStmt>),
     WhileStmt(Box<WhileStmt>),
     BreakStmt(Token),
     ContinueStmt(Token),
     FunctionStmt(Box<FunctionStmt>),
     ReturnStmt(Box<ReturnStmt>),
-}
-
-#[derive(Clone)]
-pub struct ExpressionStmt {
-    pub value: Expression,
-}
-
-#[derive(Clone)]
-pub struct PrintStmt {
-    pub value: Expression,
+    ClassStmt(Box<ClassStmt>),
 }
 
 #[derive(Clone)]
 pub struct VariableDeclaration {
     pub name: Token,
     pub initializer: Option<Expression>,
-}
-
-#[derive(Clone)]
-pub struct VariableStmt {
-    pub stmts: Vec<VariableDeclaration>,
-}
-
-#[derive(Clone)]
-pub struct BlockStmt {
-    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Clone)]
@@ -67,6 +48,12 @@ pub struct ReturnStmt {
     pub value: Option<Expression>,
 }
 
+#[derive(Clone)]
+pub struct ClassStmt {
+    pub name: Token,
+    pub methods: Vec<Stmt>,
+}
+
 impl ResolvableFunction for FunctionStmt {
     fn params(&self) -> &Vec<Token> {
         &self.params
@@ -84,16 +71,17 @@ pub trait StmtVisitor {
     type Item;
 
     fn visit_empty_stmt(&mut self) -> Self::Item;
-    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> Self::Item;
-    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Item;
-    fn visit_variable_stmt(&mut self, stmt: &VariableStmt) -> Self::Item;
-    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Item;
+    fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Item;
+    fn visit_print_stmt(&mut self, stmt: &Expression) -> Self::Item;
+    fn visit_variable_stmt(&mut self, stmt: &Vec<VariableDeclaration>) -> Self::Item;
+    fn visit_block_stmt(&mut self, stmt: &Vec<Stmt>) -> Self::Item;
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Item;
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Item;
     fn visit_break_stmt(&mut self, keyword: &Token) -> Self::Item;
     fn visit_continue_stmt(&mut self, keyword: &Token) -> Self::Item;
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item;
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Item;
+    fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Item;
 }
 
 impl Stmt {
@@ -110,6 +98,7 @@ impl Stmt {
             Stmt::ContinueStmt(keyword) => visitor.visit_continue_stmt(keyword),
             Stmt::FunctionStmt(function_stmt) => visitor.visit_function_stmt(function_stmt),
             Stmt::ReturnStmt(return_stmt) => visitor.visit_return_stmt(return_stmt),
+            Stmt::ClassStmt(class_stmt) => visitor.visit_class_stmt(class_stmt),
         }
     }
 }

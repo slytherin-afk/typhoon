@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{errors::RuntimeError, Object, Token};
 
 pub struct Environment {
-    values: HashMap<String, Rc<Object>>,
+    values: HashMap<String, Object>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -15,54 +15,54 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, token: &Token) -> Result<Rc<Object>, RuntimeError> {
-        if let Some(obj) = self.values.get(&token.lexeme) {
-            Ok(Rc::clone(obj))
+    pub fn get(&self, name: &Token) -> Result<Object, RuntimeError> {
+        if let Some(obj) = self.values.get(&name.lexeme) {
+            Ok(obj.clone())
         } else if let Some(env) = &self.enclosing {
-            env.borrow().get(token)
+            env.borrow().get(name)
         } else {
             Err(RuntimeError::new(
-                token.clone(),
-                format!("Undefined variable '{}'", token.lexeme),
+                name.clone(),
+                format!("Undefined variable '{}'", name.lexeme),
             ))
         }
     }
 
-    pub fn get_at(&self, token: &Token, depth: usize) -> Result<Rc<Object>, RuntimeError> {
+    pub fn get_at(&self, depth: usize, name: &str) -> Result<Object, RuntimeError> {
         if depth == 0 {
-            Ok(Rc::clone(self.values.get(&token.lexeme).unwrap()))
+            Ok(self.values.get(name).unwrap().clone())
         } else {
             self.enclosing
                 .as_ref()
                 .unwrap()
                 .borrow()
-                .get_at(token, depth - 1)
+                .get_at(depth - 1, name)
         }
     }
 
-    pub fn assign(&mut self, token: &Token, value: Rc<Object>) -> Result<(), RuntimeError> {
-        if self.values.contains_key(&token.lexeme) {
-            self.values.insert(String::clone(&token.lexeme), value);
+    pub fn assign(&mut self, name: &Token, value: Object) -> Result<(), RuntimeError> {
+        if self.values.contains_key(&name.lexeme) {
+            self.values.insert(String::clone(&name.lexeme), value);
 
             Ok(())
         } else if let Some(env) = &mut self.enclosing {
-            env.borrow_mut().assign(token, value)
+            env.borrow_mut().assign(name, value)
         } else {
             Err(RuntimeError::new(
-                token.clone(),
-                format!("Undefined variable '{}'", token.lexeme),
+                name.clone(),
+                format!("Undefined variable '{}'", name.lexeme),
             ))
         }
     }
 
     pub fn assign_at(
         &mut self,
-        token: &Token,
-        value: Rc<Object>,
         depth: usize,
+        name: &str,
+        value: Object,
     ) -> Result<(), RuntimeError> {
         if depth == 0 {
-            self.values.insert(String::clone(&token.lexeme), value);
+            self.values.insert(String::from(name), value);
 
             Ok(())
         } else {
@@ -70,11 +70,11 @@ impl Environment {
                 .as_ref()
                 .unwrap()
                 .borrow_mut()
-                .assign_at(token, value, depth - 1)
+                .assign_at(depth - 1, name, value)
         }
     }
 
-    pub fn define(&mut self, name: &str, value: Rc<Object>) -> &mut Self {
+    pub fn define(&mut self, name: &str, value: Object) -> &mut Self {
         self.values.insert(String::from(name), value);
         self
     }

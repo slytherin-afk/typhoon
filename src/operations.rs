@@ -192,6 +192,6 @@ pub fn is_truthy(literal: &Object) -> bool {
         Object::Number(number) => *number != 0.0,
         Object::String(string) => !string.is_empty(),
         Object::Boolean(boolean) => *boolean,
-        Object::Callable(_) => true,
+        _ => true,
     }
 }

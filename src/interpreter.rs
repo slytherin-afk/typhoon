@@ -3,15 +3,15 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     errors::{RuntimeError, RuntimeException},
     expression::{
-        Assignment, Binary, Call, Comma, Expression, ExpressionVisitor, Grouping, Lambda, Literal,
-        Logical, Ternary, Unary, Variable,
+        Assignment, Binary, Call, Comma, Expression, ExpressionVisitor, Get, Lambda, Logical, Set,
+        Ternary, Unary,
     },
     globals, operations,
     stmt::{
-        BlockStmt, ExpressionStmt, FunctionStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StmtVisitor,
-        VariableStmt, WhileStmt,
+        ClassStmt, FunctionStmt, IfStmt, ReturnStmt, Stmt, StmtVisitor, VariableDeclaration,
+        WhileStmt,
     },
-    Environment, Function, Lib, Object, Token, TokenType,
+    Class, Environment, Function, Lib, Object, Token, TokenType,
 };
 
 pub struct Interpreter {
@@ -26,7 +26,7 @@ impl Interpreter {
 
         globals
             .borrow_mut()
-            .define("clock", Rc::new(Object::Callable(Rc::new(globals::Clock))));
+            .define("clock", Object::Callable(Rc::new(globals::Clock)));
 
         Self {
             environment: Rc::clone(&globals),
@@ -48,14 +48,11 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, expr: &Expression) -> Result<Rc<Object>, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expression) -> Result<Object, RuntimeError> {
         expr.accept(self)
     }
 
-    fn evaluate_and_map_error(
-        &mut self,
-        expr: &Expression,
-    ) -> Result<Rc<Object>, RuntimeException> {
+    fn evaluate_and_map_error(&mut self, expr: &Expression) -> Result<Object, RuntimeException> {
         self.evaluate(expr)
             .map_err(|e| RuntimeException::RuntimeError(e))
     }
@@ -84,18 +81,18 @@ impl Interpreter {
         self.locals.insert(String::from(hash), depth);
     }
 
-    fn look_up_variable(&mut self, name: &Token) -> Result<Rc<Object>, RuntimeError> {
+    fn look_up_variable(&mut self, name: &Token) -> Result<Object, RuntimeError> {
         let distance = self.locals.get(name.identifier_hash.as_ref().unwrap());
 
         match distance {
-            Some(depth) => self.environment.borrow().get_at(name, *depth),
+            Some(depth) => self.environment.borrow().get_at(*depth, &name.lexeme),
             None => self.globals.borrow().get(&name),
         }
     }
 }
 
 impl ExpressionVisitor for Interpreter {
-    type Item = Result<Rc<Object>, RuntimeError>;
+    type Item = Result<Object, RuntimeError>;
 
     fn visit_comma(&mut self, expr: &Comma) -> Self::Item {
         self.evaluate(&expr.left)?;
@@ -103,28 +100,25 @@ impl ExpressionVisitor for Interpreter {
     }
 
     fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
-        let function = Function {
-            declaration: expr.clone(),
-            closure: Rc::clone(&self.environment),
-        };
+        let function = Function::new(expr.clone(), Rc::clone(&self.environment), false);
 
-        Ok(Rc::new(Object::Callable(Rc::new(function))))
+        Ok(Object::Callable(Rc::new(function)))
     }
 
     fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item {
-        let value = self.evaluate(&expr.expression)?;
+        let value = self.evaluate(&expr.value)?;
         let distance = self.locals.get(expr.name.identifier_hash.as_ref().unwrap());
 
         match distance {
             Some(depth) => {
                 self.environment
                     .borrow_mut()
-                    .assign_at(&expr.name, Rc::clone(&value), *depth)?
+                    .assign_at(*depth, &expr.name.lexeme, value.clone())?
             }
             None => self
                 .globals
                 .borrow_mut()
-                .assign(&expr.name, Rc::clone(&value))?,
+                .assign(&expr.name, value.clone())?,
         };
 
         Ok(value)
@@ -164,10 +158,29 @@ impl ExpressionVisitor for Interpreter {
         Ok(value)
     }
 
+    fn visit_set(&mut self, expr: &Set) -> Self::Item {
+        let object = self.evaluate(&expr.object)?;
+
+        match object {
+            Object::ClassInstance(class_instance) => {
+                let value = self.evaluate(&expr.value)?;
+
+                class_instance.borrow_mut().set(&expr.name, value.clone())?;
+
+                Ok(value)
+            }
+            _ => Err(RuntimeError::new(
+                expr.name.clone(),
+                String::from("Only class instance have fields"),
+            )),
+        }
+    }
+
     fn visit_binary(&mut self, expr: &Binary) -> Self::Item {
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
-        let value = match expr.operator.token_type {
+
+        match expr.operator.token_type {
             TokenType::Plus => operations::handle_addition(&left, &right, &expr.operator),
             TokenType::Minus => operations::handle_subtraction(&left, &right, &expr.operator),
             TokenType::Star => operations::handle_multiplication(&left, &right, &expr.operator),
@@ -183,9 +196,7 @@ impl ExpressionVisitor for Interpreter {
             TokenType::BangEqual => Ok(Object::Boolean(left != right)),
             TokenType::EqualEqual => Ok(Object::Boolean(left == right)),
             _ => unreachable!(),
-        }?;
-
-        Ok(Rc::new(value))
+        }
     }
 
     fn visit_unary(&mut self, expr: &Unary) -> Self::Item {
@@ -193,7 +204,7 @@ impl ExpressionVisitor for Interpreter {
         let literal = match expr.operator.token_type {
             TokenType::Bang => Object::Boolean(!operations::is_truthy(&literal)),
             TokenType::Minus => {
-                let literal = match *literal {
+                let literal = match literal {
                     Object::Number(number) => number,
                     Object::Boolean(boolean) => operations::bool_to_number(boolean),
                     _ => {
@@ -209,7 +220,7 @@ impl ExpressionVisitor for Interpreter {
             _ => unreachable!(),
         };
 
-        Ok(Rc::new(literal))
+        Ok(literal)
     }
 
     fn visit_call(&mut self, expr: &Call) -> Self::Item {
@@ -220,7 +231,7 @@ impl ExpressionVisitor for Interpreter {
             .map(|f| self.evaluate(f))
             .collect::<Result<Vec<_>, _>>()?;
 
-        match &*callee {
+        match callee {
             Object::Callable(c) => {
                 let arity = c.arity();
 
@@ -240,16 +251,34 @@ impl ExpressionVisitor for Interpreter {
         }
     }
 
-    fn visit_grouping(&mut self, expr: &Grouping) -> Self::Item {
-        self.evaluate(&expr.expression)
+    fn visit_get(&mut self, expr: &Get) -> Self::Item {
+        let object = self.evaluate(&expr.object)?;
+
+        match &object {
+            Object::ClassInstance(class_instance) => {
+                class_instance.borrow().get(object.clone(), &expr.name)
+            }
+            _ => Err(RuntimeError::new(
+                expr.name.clone(),
+                String::from("Only class instance have known properties"),
+            )),
+        }
     }
 
-    fn visit_literal(&mut self, expr: &Literal) -> Self::Item {
-        Ok(Rc::new(expr.value.clone()))
+    fn visit_grouping(&mut self, expr: &Expression) -> Self::Item {
+        self.evaluate(expr)
     }
 
-    fn visit_variable(&mut self, expr: &Variable) -> Self::Item {
-        return self.look_up_variable(&expr.name);
+    fn visit_variable(&mut self, expr: &Token) -> Self::Item {
+        self.look_up_variable(expr)
+    }
+
+    fn visit_this(&mut self, expr: &Token) -> Self::Item {
+        self.look_up_variable(expr)
+    }
+
+    fn visit_literal(&mut self, expr: &Object) -> Self::Item {
+        Ok(expr.clone())
     }
 }
 
@@ -260,26 +289,26 @@ impl StmtVisitor for Interpreter {
         Ok(())
     }
 
-    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> Self::Item {
-        self.evaluate_and_map_error(&stmt.value)?;
+    fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Item {
+        self.evaluate_and_map_error(stmt)?;
 
         Ok(())
     }
 
-    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Item {
-        let value = self.evaluate_and_map_error(&stmt.value)?;
+    fn visit_print_stmt(&mut self, stmt: &Expression) -> Self::Item {
+        let value = self.evaluate_and_map_error(stmt)?;
 
         println!("{}", value);
 
         Ok(())
     }
 
-    fn visit_variable_stmt(&mut self, stmt: &VariableStmt) -> Self::Item {
-        for var in &stmt.stmts {
+    fn visit_variable_stmt(&mut self, stmt: &Vec<VariableDeclaration>) -> Self::Item {
+        for var in stmt {
             let value = if let Some(expr) = &var.initializer {
                 self.evaluate_and_map_error(expr)?
             } else {
-                Rc::new(Object::Undefined)
+                Object::Undefined
             };
 
             self.environment
@@ -290,11 +319,8 @@ impl StmtVisitor for Interpreter {
         Ok(())
     }
 
-    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Item {
-        self.execute_block(
-            &stmt.stmts,
-            Environment::new(Some(Rc::clone(&self.environment))),
-        )?;
+    fn visit_block_stmt(&mut self, stmt: &Vec<Stmt>) -> Self::Item {
+        self.execute_block(stmt, Environment::new(Some(Rc::clone(&self.environment))))?;
 
         Ok(())
     }
@@ -312,7 +338,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Item {
-        while operations::is_truthy(&*self.evaluate_and_map_error(&stmt.condition)?) {
+        while operations::is_truthy(&self.evaluate_and_map_error(&stmt.condition)?) {
             let result = self.execute(&stmt.body);
 
             if let Err(e) = &result {
@@ -336,15 +362,11 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item {
-        let function = Function {
-            declaration: stmt.clone(),
-            closure: Rc::clone(&self.environment),
-        };
+        let function = Function::new(stmt.clone(), Rc::clone(&self.environment), false);
 
-        self.environment.borrow_mut().define(
-            &stmt.name.lexeme,
-            Rc::new(Object::Callable(Rc::new(function))),
-        );
+        self.environment
+            .borrow_mut()
+            .define(&stmt.name.lexeme, Object::Callable(Rc::new(function)));
 
         Ok(())
     }
@@ -353,9 +375,44 @@ impl StmtVisitor for Interpreter {
         let value = if let Some(value) = &stmt.value {
             self.evaluate_and_map_error(value)?
         } else {
-            Rc::new(Object::Undefined)
+            Object::Undefined
         };
 
         Err(RuntimeException::ReturnException(value))
+    }
+
+    fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Item {
+        self.environment
+            .borrow_mut()
+            .define(&stmt.name.lexeme, Object::Undefined);
+
+        let mut methods = HashMap::new();
+
+        for method in &stmt.methods {
+            match method {
+                Stmt::FunctionStmt(function_stmt) => {
+                    let function = Function::new(
+                        *function_stmt.clone(),
+                        Rc::clone(&self.environment),
+                        function_stmt.name.lexeme.eq("init"),
+                    );
+
+                    methods.insert(
+                        String::clone(&function_stmt.name.lexeme),
+                        Object::Callable(Rc::new(function)),
+                    );
+                }
+                _ => unreachable!(),
+            };
+        }
+
+        let class = Class::new(&stmt.name.lexeme, methods);
+
+        self.environment
+            .borrow_mut()
+            .assign(&stmt.name, Object::Callable(Rc::new(class)))
+            .map_err(|e| RuntimeException::RuntimeError(e))?;
+
+        Ok(())
     }
 }

@@ -7,12 +7,15 @@ pub enum Expression {
     Assignment(Box<Assignment>),
     Ternary(Box<Ternary>),
     Logical(Box<Logical>),
+    Set(Box<Set>),
     Binary(Box<Binary>),
     Unary(Box<Unary>),
     Call(Box<Call>),
-    Grouping(Box<Grouping>),
-    Variable(Box<Variable>),
-    Literal(Box<Literal>),
+    Get(Box<Get>),
+    Grouping(Box<Expression>),
+    Variable(Box<Token>),
+    This(Box<Token>),
+    Literal(Box<Object>),
 }
 
 #[derive(Clone)]
@@ -31,7 +34,7 @@ pub struct Lambda {
 #[derive(Clone)]
 pub struct Assignment {
     pub name: Token,
-    pub expression: Expression,
+    pub value: Expression,
 }
 
 #[derive(Clone)]
@@ -46,6 +49,13 @@ pub struct Logical {
     pub operator: Token,
     pub left: Expression,
     pub right: Expression,
+}
+
+#[derive(Clone)]
+pub struct Set {
+    pub object: Expression,
+    pub name: Token,
+    pub value: Expression,
 }
 
 #[derive(Clone)]
@@ -69,18 +79,9 @@ pub struct Call {
 }
 
 #[derive(Clone)]
-pub struct Grouping {
-    pub expression: Expression,
-}
-
-#[derive(Clone)]
-pub struct Variable {
+pub struct Get {
+    pub object: Expression,
     pub name: Token,
-}
-
-#[derive(Clone)]
-pub struct Literal {
-    pub value: Object,
 }
 
 impl ResolvableFunction for Lambda {
@@ -104,12 +105,15 @@ pub trait ExpressionVisitor {
     fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item;
     fn visit_ternary(&mut self, expr: &Ternary) -> Self::Item;
     fn visit_logical(&mut self, expr: &Logical) -> Self::Item;
+    fn visit_set(&mut self, expr: &Set) -> Self::Item;
     fn visit_binary(&mut self, expr: &Binary) -> Self::Item;
     fn visit_unary(&mut self, expr: &Unary) -> Self::Item;
     fn visit_call(&mut self, expr: &Call) -> Self::Item;
-    fn visit_grouping(&mut self, expr: &Grouping) -> Self::Item;
-    fn visit_variable(&mut self, expr: &Variable) -> Self::Item;
-    fn visit_literal(&mut self, expr: &Literal) -> Self::Item;
+    fn visit_get(&mut self, expr: &Get) -> Self::Item;
+    fn visit_grouping(&mut self, expr: &Expression) -> Self::Item;
+    fn visit_variable(&mut self, expr: &Token) -> Self::Item;
+    fn visit_this(&mut self, expr: &Token) -> Self::Item;
+    fn visit_literal(&mut self, expr: &Object) -> Self::Item;
 }
 
 impl Expression {
@@ -120,11 +124,14 @@ impl Expression {
             Expression::Assignment(assignment) => visitor.visit_assignment(assignment),
             Expression::Ternary(ternary) => visitor.visit_ternary(ternary),
             Expression::Logical(logical) => visitor.visit_logical(logical),
+            Expression::Set(set) => visitor.visit_set(set),
             Expression::Binary(binary) => visitor.visit_binary(binary),
             Expression::Unary(unary) => visitor.visit_unary(unary),
             Expression::Call(call) => visitor.visit_call(call),
+            Expression::Get(get) => visitor.visit_get(get),
             Expression::Grouping(grouping) => visitor.visit_grouping(grouping),
             Expression::Variable(variable) => visitor.visit_variable(variable),
+            Expression::This(token) => visitor.visit_this(token),
             Expression::Literal(literal) => visitor.visit_literal(literal),
         }
     }
