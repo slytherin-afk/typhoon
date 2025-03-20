@@ -1,5 +1,6 @@
-use crate::visitor::interpreter::{callable::Callable, operations::bool_to_number};
 use std::{fmt, rc::Rc};
+
+use crate::{operations::bool_to_number, Callable};
 
 #[derive(Clone)]
 pub enum Object {

@@ -1,4 +1,4 @@
-use super::token_type::TokenType;
+use crate::token_type::TokenType;
 
 #[derive(Clone)]
 pub enum LiteralType {

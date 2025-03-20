@@ -1,59 +1,18 @@
-pub mod callable;
-pub mod environment;
-pub mod function;
-pub mod globals;
-pub mod operations;
-
-use super::{ExpressionVisitor, StmtVisitor};
-use crate::{
-    expression::{
-        assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
-        lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
-        variable::Variable, Expression,
-    },
-    object::Object,
-    scanner::{token::Token, token_type::TokenType},
-    stmt::{
-        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
-        if_stmt::IfStmt, print_stmt::PrintStmt, return_stmt::ReturnStmt,
-        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
-    },
-    Lib,
-};
-use environment::Environment;
-use function::Function;
-use globals::Clock;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-pub struct RuntimeError {
-    token: Token,
-    message: String,
-}
-
-impl RuntimeError {
-    pub fn new(token: Token, message: String) -> Self {
-        Self { token, message }
-    }
-
-    pub fn token(&self) -> &Token {
-        &self.token
-    }
-
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-}
-
-pub struct BreakException;
-
-pub struct ContinueException;
-
-pub enum Exception {
-    RuntimeError(RuntimeError),
-    ReturnException(Rc<Object>),
-    BreakException,
-    ContinueException,
-}
+use crate::{
+    errors::{RuntimeError, RuntimeException},
+    expression::{
+        Assignment, Binary, Call, Comma, Expression, ExpressionVisitor, Grouping, Lambda, Literal,
+        Logical, Ternary, Unary, Variable,
+    },
+    globals, operations,
+    stmt::{
+        BlockStmt, ExpressionStmt, FunctionStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StmtVisitor,
+        VariableStmt, WhileStmt,
+    },
+    Environment, Function, Lib, Object, Token, TokenType,
+};
 
 pub struct Interpreter {
     globals: Rc<RefCell<Environment>>,
@@ -67,7 +26,7 @@ impl Interpreter {
 
         globals
             .borrow_mut()
-            .define("clock", Rc::new(Object::Callable(Rc::new(Clock))));
+            .define("clock", Rc::new(Object::Callable(Rc::new(globals::Clock))));
 
         Self {
             environment: Rc::clone(&globals),
@@ -80,7 +39,9 @@ impl Interpreter {
         for stmt in stmts {
             if let Err(e) = self.execute(stmt) {
                 match e {
-                    Exception::RuntimeError(runtime_error) => Lib::runtime_error(&runtime_error),
+                    RuntimeException::RuntimeError(runtime_error) => {
+                        Lib::runtime_error(&runtime_error)
+                    }
                     _ => unreachable!(),
                 };
             }
@@ -91,15 +52,23 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn evaluate_and_map_error(&mut self, expr: &Expression) -> Result<Rc<Object>, Exception> {
-        self.evaluate(expr).map_err(|e| Exception::RuntimeError(e))
+    fn evaluate_and_map_error(
+        &mut self,
+        expr: &Expression,
+    ) -> Result<Rc<Object>, RuntimeException> {
+        self.evaluate(expr)
+            .map_err(|e| RuntimeException::RuntimeError(e))
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), Exception> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeException> {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) -> Result<(), Exception> {
+    pub fn execute_block(
+        &mut self,
+        stmts: &Vec<Stmt>,
+        env: Environment,
+    ) -> Result<(), RuntimeException> {
         let mut env_ref = Rc::new(RefCell::new(env));
 
         std::mem::swap(&mut self.environment, &mut env_ref);
@@ -131,6 +100,15 @@ impl ExpressionVisitor for Interpreter {
     fn visit_comma(&mut self, expr: &Comma) -> Self::Item {
         self.evaluate(&expr.left)?;
         self.evaluate(&expr.right)
+    }
+
+    fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
+        let function = Function {
+            declaration: expr.clone(),
+            closure: Rc::clone(&self.environment),
+        };
+
+        Ok(Rc::new(Object::Callable(Rc::new(function))))
     }
 
     fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item {
@@ -273,22 +251,31 @@ impl ExpressionVisitor for Interpreter {
     fn visit_variable(&mut self, expr: &Variable) -> Self::Item {
         return self.look_up_variable(&expr.name);
     }
-
-    fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
-        let function = Function {
-            declaration: expr.clone(),
-            closure: Rc::clone(&self.environment),
-        };
-
-        Ok(Rc::new(Object::Callable(Rc::new(function))))
-    }
 }
 
 impl StmtVisitor for Interpreter {
-    type Item = Result<(), Exception>;
+    type Item = Result<(), RuntimeException>;
+
+    fn visit_empty_stmt(&mut self) -> Self::Item {
+        Ok(())
+    }
+
+    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> Self::Item {
+        self.evaluate_and_map_error(&stmt.value)?;
+
+        Ok(())
+    }
+
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Item {
+        let value = self.evaluate_and_map_error(&stmt.value)?;
+
+        println!("{}", value);
+
+        Ok(())
+    }
 
     fn visit_variable_stmt(&mut self, stmt: &VariableStmt) -> Self::Item {
-        for var in &stmt.variables {
+        for var in &stmt.stmts {
             let value = if let Some(expr) = &var.initializer {
                 self.evaluate_and_map_error(expr)?
             } else {
@@ -301,6 +288,51 @@ impl StmtVisitor for Interpreter {
         }
 
         Ok(())
+    }
+
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Item {
+        self.execute_block(
+            &stmt.stmts,
+            Environment::new(Some(Rc::clone(&self.environment))),
+        )?;
+
+        Ok(())
+    }
+
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Item {
+        let condition = self.evaluate_and_map_error(&stmt.condition)?;
+
+        if operations::is_truthy(&condition) {
+            self.execute(&stmt.truth)?;
+        } else if let Some(falsy_stmt) = &stmt.falsy {
+            self.execute(falsy_stmt)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Item {
+        while operations::is_truthy(&*self.evaluate_and_map_error(&stmt.condition)?) {
+            let result = self.execute(&stmt.body);
+
+            if let Err(e) = &result {
+                match e {
+                    RuntimeException::BreakException => break,
+                    RuntimeException::ContinueException => continue,
+                    _ => result?,
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn visit_break_stmt(&mut self, _: &Token) -> Self::Item {
+        Err(RuntimeException::BreakException)
+    }
+
+    fn visit_continue_stmt(&mut self, _: &Token) -> Self::Item {
+        Err(RuntimeException::ContinueException)
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item {
@@ -324,69 +356,6 @@ impl StmtVisitor for Interpreter {
             Rc::new(Object::Undefined)
         };
 
-        Err(Exception::ReturnException(value))
-    }
-
-    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Item {
-        while operations::is_truthy(&*self.evaluate_and_map_error(&stmt.condition)?) {
-            let result = self.execute(&stmt.body);
-
-            if let Err(e) = &result {
-                match e {
-                    Exception::BreakException => break,
-                    Exception::ContinueException => continue,
-                    _ => result?,
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Item {
-        let condition = self.evaluate_and_map_error(&stmt.condition)?;
-
-        if operations::is_truthy(&condition) {
-            self.execute(&stmt.truth)?;
-        } else if let Some(falsy_stmt) = &stmt.falsy {
-            self.execute(falsy_stmt)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Item {
-        self.execute_block(
-            &stmt.stmts,
-            Environment::new(Some(Rc::clone(&self.environment))),
-        )?;
-
-        Ok(())
-    }
-
-    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Item {
-        let value = self.evaluate_and_map_error(&stmt.expression)?;
-
-        println!("{}", value);
-
-        Ok(())
-    }
-
-    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> Self::Item {
-        self.evaluate_and_map_error(&stmt.expression)?;
-
-        Ok(())
-    }
-
-    fn visit_continue_stmt(&mut self, _: &Token) -> Self::Item {
-        Err(Exception::ContinueException)
-    }
-
-    fn visit_break_stmt(&mut self, _: &Token) -> Self::Item {
-        Err(Exception::BreakException)
-    }
-
-    fn visit_empty_stmt(&mut self) -> Self::Item {
-        Ok(())
+        Err(RuntimeException::ReturnException(value))
     }
 }

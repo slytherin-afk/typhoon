@@ -1,5 +1,6 @@
-use crate::{object::Object, scanner::token::Token, visitor::interpreter::RuntimeError};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+use crate::{errors::RuntimeError, Object, Token};
 
 pub struct Environment {
     values: HashMap<String, Rc<Object>>,

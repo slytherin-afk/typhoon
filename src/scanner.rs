@@ -1,11 +1,7 @@
-pub mod token;
-pub mod token_type;
-
-use crate::Lib;
 use phf::phf_map;
-use token::{LiteralType, Token};
-use token_type::TokenType;
 use uuid::Uuid;
+
+use crate::{Lib, LiteralType, Token, TokenType};
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "and" => TokenType::And,

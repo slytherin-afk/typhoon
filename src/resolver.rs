@@ -1,20 +1,16 @@
-use super::{interpreter::Interpreter, ExpressionVisitor, StmtVisitor};
+use std::collections::HashMap;
+
 use crate::{
     expression::{
-        assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
-        lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
-        variable::Variable, Expression,
+        Assignment, Binary, Call, Comma, Expression, ExpressionVisitor, Grouping, Lambda, Literal,
+        Logical, Ternary, Unary, Variable,
     },
-    resolvable_function::ResolvableFunction,
-    scanner::token::Token,
     stmt::{
-        block_stmt::BlockStmt, expression_stmt::ExpressionStmt, function_stmt::FunctionStmt,
-        if_stmt::IfStmt, print_stmt::PrintStmt, return_stmt::ReturnStmt,
-        variable_stmt::VariableStmt, while_stmt::WhileStmt, Stmt,
+        BlockStmt, ExpressionStmt, FunctionStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StmtVisitor,
+        VariableStmt, WhileStmt,
     },
-    Lib,
+    Interpreter, Lib, ResolvableFunction, Token,
 };
-use std::collections::HashMap;
 
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
@@ -126,10 +122,24 @@ impl<'a> ExpressionVisitor for Resolver<'a> {
         self.resolve_expression(&expr.right);
     }
 
+    fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
+        self.resolve_function(expr);
+    }
+
+    fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item {
+        self.resolve_expression(&expr.expression);
+        self.resolve_local(&expr.name);
+    }
+
     fn visit_ternary(&mut self, expr: &Ternary) -> Self::Item {
         self.resolve_expression(&expr.condition);
         self.resolve_expression(&expr.truth);
         self.resolve_expression(&expr.falsy);
+    }
+
+    fn visit_logical(&mut self, expr: &Logical) -> Self::Item {
+        self.resolve_expression(&expr.left);
+        self.resolve_expression(&expr.right);
     }
 
     fn visit_binary(&mut self, expr: &Binary) -> Self::Item {
@@ -141,11 +151,17 @@ impl<'a> ExpressionVisitor for Resolver<'a> {
         self.resolve_expression(&expr.right);
     }
 
+    fn visit_call(&mut self, expr: &Call) -> Self::Item {
+        self.resolve_expression(&expr.callee);
+
+        for arg in &expr.arguments {
+            self.resolve_expression(&arg);
+        }
+    }
+
     fn visit_grouping(&mut self, expr: &Grouping) -> Self::Item {
         self.resolve_expression(&expr.expression);
     }
-
-    fn visit_literal(&mut self, _: &Literal) -> Self::Item {}
 
     fn visit_variable(&mut self, expr: &Variable) -> Self::Item {
         if !self.scopes.is_empty() {
@@ -160,42 +176,24 @@ impl<'a> ExpressionVisitor for Resolver<'a> {
         self.resolve_local(&expr.name);
     }
 
-    fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item {
-        self.resolve_expression(&expr.expression);
-        self.resolve_local(&expr.name);
-    }
-
-    fn visit_logical(&mut self, expr: &Logical) -> Self::Item {
-        self.resolve_expression(&expr.left);
-        self.resolve_expression(&expr.right);
-    }
-
-    fn visit_call(&mut self, expr: &Call) -> Self::Item {
-        self.resolve_expression(&expr.callee);
-
-        for arg in &expr.arguments {
-            self.resolve_expression(&arg);
-        }
-    }
-
-    fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
-        self.resolve_function(expr);
-    }
+    fn visit_literal(&mut self, _: &Literal) -> Self::Item {}
 }
 
 impl<'a> StmtVisitor for Resolver<'a> {
     type Item = ();
 
+    fn visit_empty_stmt(&mut self) -> Self::Item {}
+
     fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> Self::Item {
-        self.resolve_expression(&stmt.expression);
+        self.resolve_expression(&stmt.value);
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Item {
-        self.resolve_expression(&stmt.expression);
+        self.resolve_expression(&stmt.value);
     }
 
     fn visit_variable_stmt(&mut self, stmt: &VariableStmt) -> Self::Item {
-        for variable in &stmt.variables {
+        for variable in &stmt.stmts {
             self.declare(&variable.name);
 
             if let Some(initializer) = &variable.initializer {
@@ -228,6 +226,22 @@ impl<'a> StmtVisitor for Resolver<'a> {
         self.loop_depth -= 1;
     }
 
+    fn visit_break_stmt(&mut self, keyword: &Token) -> Self::Item {
+        if self.loop_depth == 0 {
+            Lib::error_two(keyword, "Can't use break outside a loop");
+        } else if self.function_depth >= self.loop_depth {
+            Lib::error_two(keyword, "Jump target cannot cross function boundary");
+        }
+    }
+
+    fn visit_continue_stmt(&mut self, keyword: &Token) -> Self::Item {
+        if self.loop_depth == 0 {
+            Lib::error_two(keyword, "Can't use continue outside a loop");
+        } else if self.function_depth >= self.loop_depth {
+            Lib::error_two(keyword, "Jump target cannot cross function boundary");
+        }
+    }
+
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item {
         self.declare(&stmt.name);
         self.define(&stmt.name);
@@ -243,22 +257,4 @@ impl<'a> StmtVisitor for Resolver<'a> {
             self.resolve_expression(value);
         }
     }
-
-    fn visit_continue_stmt(&mut self, keyword: &Token) -> Self::Item {
-        if self.loop_depth == 0 {
-            Lib::error_two(keyword, "Can't use continue outside a loop");
-        } else if self.function_depth >= self.loop_depth {
-            Lib::error_two(keyword, "Jump target cannot cross function boundary");
-        }
-    }
-
-    fn visit_break_stmt(&mut self, keyword: &Token) -> Self::Item {
-        if self.loop_depth == 0 {
-            Lib::error_two(keyword, "Can't use break outside a loop");
-        } else if self.function_depth >= self.loop_depth {
-            Lib::error_two(keyword, "Jump target cannot cross function boundary");
-        }
-    }
-
-    fn visit_empty_stmt(&mut self) -> Self::Item {}
 }

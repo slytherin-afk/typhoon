@@ -1,9 +1,9 @@
-use super::{callable::Callable, Interpreter, RuntimeError};
-use crate::object::Object;
 use std::{
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use crate::{errors::RuntimeError, Callable, Interpreter, Object};
 
 pub struct Clock;
 

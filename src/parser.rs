@@ -1,35 +1,20 @@
 use crate::{
+    errors::ParseError,
     expression::{
-        assignment::Assignment, binary::Binary, call::Call, comma::Comma, grouping::Grouping,
-        lambda::Lambda, literal::Literal, logical::Logical, ternary::Ternary, unary::Unary,
-        variable::Variable, Expression,
-    },
-    object::Object,
-    scanner::{
-        token::{LiteralType, Token},
-        token_type::TokenType,
+        Assignment, Binary, Call, Comma, Expression, Grouping, Lambda, Literal, Logical, Ternary,
+        Unary, Variable,
     },
     stmt::{
-        block_stmt::BlockStmt,
-        expression_stmt::ExpressionStmt,
-        function_stmt::FunctionStmt,
-        if_stmt::IfStmt,
-        print_stmt::PrintStmt,
-        return_stmt::ReturnStmt,
-        variable_stmt::{VariableDeclaration, VariableStmt},
-        while_stmt::WhileStmt,
-        Stmt,
+        BlockStmt, ExpressionStmt, FunctionStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, WhileStmt,
+        {VariableDeclaration, VariableStmt},
     },
-    Lib,
+    Lib, LiteralType, Object, Token, TokenType,
 };
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
 }
-
-#[derive(Debug)]
-pub struct ParseError;
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
@@ -63,7 +48,7 @@ impl Parser {
     }
 
     fn variable_stmt(&mut self) -> Result<Stmt, ParseError> {
-        let mut variables = vec![];
+        let mut stmts = vec![];
         let name = self
             .consume(&TokenType::Identifier, "Expect an identifier")?
             .clone();
@@ -73,7 +58,7 @@ impl Parser {
             None
         };
 
-        variables.push(VariableDeclaration { name, initializer });
+        stmts.push(VariableDeclaration { name, initializer });
 
         while self.matches(&[TokenType::Comma]) {
             let name = self
@@ -85,7 +70,7 @@ impl Parser {
                 None
             };
 
-            variables.push(VariableDeclaration { name, initializer });
+            stmts.push(VariableDeclaration { name, initializer });
         }
 
         self.consume(
@@ -93,7 +78,7 @@ impl Parser {
             "Expect a ';' at the end of variable declaration",
         )?;
 
-        Ok(Stmt::VariableStmt(Box::new(VariableStmt { variables })))
+        Ok(Stmt::VariableStmt(Box::new(VariableStmt { stmts })))
     }
 
     fn stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -274,11 +259,11 @@ impl Parser {
 
         let mut body = self.stmt()?;
 
-        if let Some(expression) = increment {
+        if let Some(value) = increment {
             body = Stmt::BlockStmt(Box::new(BlockStmt {
                 stmts: vec![
                     body,
-                    Stmt::ExpressionStmt(Box::new(ExpressionStmt { expression })),
+                    Stmt::ExpressionStmt(Box::new(ExpressionStmt { value })),
                 ],
             }));
         }
@@ -309,24 +294,22 @@ impl Parser {
     }
 
     fn print_stmt(&mut self) -> Result<Stmt, ParseError> {
-        let expression = self.expression()?;
+        let value = self.expression()?;
 
         self.consume(&TokenType::SemiColon, "Expect a ';' at the end of print")?;
 
-        Ok(Stmt::PrintStmt(Box::new(PrintStmt { expression })))
+        Ok(Stmt::PrintStmt(Box::new(PrintStmt { value })))
     }
 
     fn expr_stmt(&mut self) -> Result<Stmt, ParseError> {
-        let expression = self.expression()?;
+        let value = self.expression()?;
 
         self.consume(
             &TokenType::SemiColon,
             "Expect a ';' at the end of expression",
         )?;
 
-        Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt {
-            expression,
-        })))
+        Ok(Stmt::ExpressionStmt(Box::new(ExpressionStmt { value })))
     }
 
     fn expression(&mut self) -> Result<Expression, ParseError> {

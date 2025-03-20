@@ -1,19 +1,33 @@
+pub mod errors;
 pub mod expression;
-pub mod object;
-pub mod parser;
-pub mod resolvable_function;
-pub mod scanner;
+pub mod globals;
+pub mod operations;
 pub mod stmt;
-pub mod visitor;
+
+mod environment;
+mod function;
+mod interpreter;
+mod object;
+mod parser;
+mod resolver;
+mod scanner;
+mod token;
+mod token_type;
 
 use colored::Colorize;
-use parser::Parser;
 use rustyline::DefaultEditor;
-use scanner::{token::Token, token_type::TokenType, Scanner};
-use visitor::{
-    interpreter::{Interpreter, RuntimeError},
-    resolver::Resolver,
-};
+
+pub use environment::Environment;
+pub use function::{Callable, Function, ResolvableFunction};
+pub use interpreter::Interpreter;
+pub use object::Object;
+pub use token::{LiteralType, Token};
+pub use token_type::TokenType;
+
+use errors::RuntimeError;
+use parser::Parser;
+use resolver::Resolver;
+use scanner::Scanner;
 
 pub struct Lib {
     interpreter: Interpreter,
@@ -35,7 +49,7 @@ impl Lib {
     }
 
     pub fn run_prompt(&mut self) {
-        println!("Typhoon {}", VERSION);
+        println!("{}", VERSION);
 
         let mut rl = DefaultEditor::new().expect("failed to create editor");
 

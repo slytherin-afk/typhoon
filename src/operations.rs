@@ -1,5 +1,4 @@
-use super::RuntimeError;
-use crate::{object::Object, scanner::token::Token};
+use crate::{errors::RuntimeError, Object, Token};
 
 pub fn handle_addition(
     left: &Object,
