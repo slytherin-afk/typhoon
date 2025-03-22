@@ -16,6 +16,7 @@ use crate::{
 enum FunctionType {
     Function,
     Initializer,
+    Static,
     Method,
     None,
 }
@@ -211,6 +212,11 @@ impl<'a> ExpressionVisitor for Resolver<'a> {
         if matches!(self.class_type, ClassType::None) {
             Lib::error_two(&expr, "Can't use 'this' outside a class method");
         }
+
+        if matches!(self.function_type, FunctionType::Static) {
+            Lib::error_two(&expr, "Can't use 'this' inside a static method");
+        }
+
         self.resolve_local(expr);
     }
 
@@ -307,6 +313,19 @@ impl<'a> StmtVisitor for Resolver<'a> {
         self.declare(&stmt.name);
         self.define(&stmt.name);
         self.begin_scope();
+
+        for method in &stmt.statics {
+            let mut declaration = FunctionType::Static;
+
+            if let Stmt::FunctionStmt(function_stmt) = method {
+                if function_stmt.name.lexeme.eq("init") {
+                    declaration = FunctionType::Initializer;
+                }
+
+                self.resolve_function(&**function_stmt, declaration);
+            }
+        }
+
         self.scopes
             .last_mut()
             .unwrap()
@@ -317,7 +336,6 @@ impl<'a> StmtVisitor for Resolver<'a> {
 
             if let Stmt::FunctionStmt(function_stmt) = method {
                 if function_stmt.name.lexeme.eq("init") {
-                    print!("fsd");
                     declaration = FunctionType::Initializer;
                 }
 

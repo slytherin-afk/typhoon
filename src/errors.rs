@@ -3,7 +3,7 @@ use crate::{Object, Token};
 #[derive(Debug)]
 pub struct ParseError;
 
-pub enum RuntimeException {
+pub enum VMException {
     RuntimeError(RuntimeError),
     ReturnException(Object),
     BreakException,
@@ -14,6 +14,7 @@ pub struct BreakException;
 
 pub struct ContinueException;
 
+#[derive(Debug)]
 pub struct RuntimeError {
     token: Token,
     message: String,

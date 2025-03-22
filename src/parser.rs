@@ -307,9 +307,14 @@ impl Parser {
         self.consume(&TokenType::LeftBraces, "Expected '{' after class body")?;
 
         let mut methods = vec![];
+        let mut statics = vec![];
 
         while !self.check(&TokenType::RightBraces) {
-            methods.push(self.function_stmt("method")?);
+            if self.matches(&[TokenType::Class]) {
+                statics.push(self.function_stmt("static")?);
+            } else {
+                methods.push(self.function_stmt("method")?);
+            }
         }
 
         self.consume(
@@ -317,7 +322,11 @@ impl Parser {
             "Expected '}' at the end of class body",
         )?;
 
-        Ok(Stmt::ClassStmt(Box::new(ClassStmt { name, methods })))
+        Ok(Stmt::ClassStmt(Box::new(ClassStmt {
+            name,
+            methods,
+            statics,
+        })))
     }
 
     fn expression(&mut self) -> Result<Expression, ParseError> {

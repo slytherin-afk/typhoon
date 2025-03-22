@@ -16,16 +16,16 @@ mod token_type;
 use colored::Colorize;
 use rustyline::DefaultEditor;
 
-pub use environment::Environment;
-pub use interpreter::Interpreter;
-pub use object::{Callable, Class, ClassInstance, Function, Object, ResolvableFunction};
-pub use token::{LiteralType, Token};
-pub use token_type::TokenType;
-
 use errors::RuntimeError;
 use parser::Parser;
 use resolver::Resolver;
 use scanner::Scanner;
+
+pub use environment::Environment;
+pub use interpreter::Interpreter;
+pub use object::{Callable, Class, ClassInstance, Function, Instance, Object, ResolvableFunction};
+pub use token::{LiteralType, Token};
+pub use token_type::TokenType;
 
 pub struct Lib {
     interpreter: Interpreter,

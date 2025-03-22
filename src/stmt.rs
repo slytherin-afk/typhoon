@@ -52,6 +52,7 @@ pub struct ReturnStmt {
 pub struct ClassStmt {
     pub name: Token,
     pub methods: Vec<Stmt>,
+    pub statics: Vec<Stmt>,
 }
 
 impl ResolvableFunction for FunctionStmt {

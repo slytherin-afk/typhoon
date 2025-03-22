@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    errors::{RuntimeError, RuntimeException},
+    errors::{RuntimeError, VMException},
     expression::{
         Assignment, Binary, Call, Comma, Expression, ExpressionVisitor, Get, Lambda, Logical, Set,
         Ternary, Unary,
@@ -11,7 +11,7 @@ use crate::{
         ClassStmt, FunctionStmt, IfStmt, ReturnStmt, Stmt, StmtVisitor, VariableDeclaration,
         WhileStmt,
     },
-    Class, Environment, Function, Lib, Object, Token, TokenType,
+    Callable, Class, Environment, Function, Instance, Lib, Object, Token, TokenType,
 };
 
 pub struct Interpreter {
@@ -39,9 +39,7 @@ impl Interpreter {
         for stmt in stmts {
             if let Err(e) = self.execute(stmt) {
                 match e {
-                    RuntimeException::RuntimeError(runtime_error) => {
-                        Lib::runtime_error(&runtime_error)
-                    }
+                    VMException::RuntimeError(runtime_error) => Lib::runtime_error(&runtime_error),
                     _ => unreachable!(),
                 };
             }
@@ -52,12 +50,12 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn evaluate_and_map_error(&mut self, expr: &Expression) -> Result<Object, RuntimeException> {
+    fn evaluate_and_map_error(&mut self, expr: &Expression) -> Result<Object, VMException> {
         self.evaluate(expr)
-            .map_err(|e| RuntimeException::RuntimeError(e))
+            .map_err(|e| VMException::RuntimeError(e))
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeException> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), VMException> {
         stmt.accept(self)
     }
 
@@ -65,7 +63,7 @@ impl Interpreter {
         &mut self,
         stmts: &Vec<Stmt>,
         env: Environment,
-    ) -> Result<(), RuntimeException> {
+    ) -> Result<(), VMException> {
         let mut env_ref = Rc::new(RefCell::new(env));
 
         std::mem::swap(&mut self.environment, &mut env_ref);
@@ -100,7 +98,7 @@ impl ExpressionVisitor for Interpreter {
     }
 
     fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item {
-        let function = Function::new(expr.clone(), Rc::clone(&self.environment), false);
+        let function = Function::new(Rc::new(expr.clone()), Rc::clone(&self.environment), false);
 
         Ok(Object::Callable(Rc::new(function)))
     }
@@ -161,17 +159,24 @@ impl ExpressionVisitor for Interpreter {
     fn visit_set(&mut self, expr: &Set) -> Self::Item {
         let object = self.evaluate(&expr.object)?;
 
+        fn set_field<T: Instance + ?Sized>(
+            instance: Rc<T>,
+            expr: &Set,
+            interpreter: &mut Interpreter,
+        ) -> Result<Object, RuntimeError> {
+            let value = interpreter.evaluate(&expr.value)?;
+
+            instance.set(&expr.name, value.clone())?;
+
+            Ok(value)
+        }
+
         match object {
-            Object::ClassInstance(class_instance) => {
-                let value = self.evaluate(&expr.value)?;
-
-                class_instance.borrow_mut().set(&expr.name, value.clone())?;
-
-                Ok(value)
-            }
+            Object::Instance(class_instance) => set_field(class_instance, expr, self),
+            Object::StaticClass(class_instance) => set_field(class_instance, expr, self),
             _ => Err(RuntimeError::new(
                 expr.name.clone(),
-                String::from("Only class instance have fields"),
+                "Only class instances have fields".to_string(),
             )),
         }
     }
@@ -231,22 +236,30 @@ impl ExpressionVisitor for Interpreter {
             .map(|f| self.evaluate(f))
             .collect::<Result<Vec<_>, _>>()?;
 
-        match callee {
-            Object::Callable(c) => {
-                let arity = c.arity();
+        fn check_and_call<T: Callable + ?Sized>(
+            callable: Rc<T>,
+            expr: &Call,
+            interpreter: &mut Interpreter,
+            arguments: Vec<Object>,
+        ) -> Result<Object, RuntimeError> {
+            let arity = callable.arity();
 
-                if arguments.len() < arity {
-                    Err(RuntimeError::new(
-                        expr.paren.clone(),
-                        format!("Expected [{arity}] arguments got [{}]", arguments.len()),
-                    ))
-                } else {
-                    c.call(self, arguments)
-                }
+            if arguments.len() < arity {
+                Err(RuntimeError::new(
+                    expr.paren.clone(),
+                    format!("Expected [{arity}] arguments got [{}]", arguments.len()),
+                ))
+            } else {
+                callable.call(interpreter, arguments)
             }
+        }
+
+        match callee {
+            Object::Callable(c) => check_and_call(c, expr, self, arguments),
+            Object::StaticClass(c) => check_and_call(c, expr, self, arguments),
             _ => Err(RuntimeError::new(
                 expr.paren.clone(),
-                String::from("Can only call functions and classes"),
+                "Can only call functions and classes".to_string(),
             )),
         }
     }
@@ -255,9 +268,8 @@ impl ExpressionVisitor for Interpreter {
         let object = self.evaluate(&expr.object)?;
 
         match &object {
-            Object::ClassInstance(class_instance) => {
-                class_instance.borrow().get(object.clone(), &expr.name)
-            }
+            Object::Instance(class_instance) => class_instance.get(object.clone(), &expr.name),
+            Object::StaticClass(class_instance) => class_instance.get(object.clone(), &expr.name),
             _ => Err(RuntimeError::new(
                 expr.name.clone(),
                 String::from("Only class instance have known properties"),
@@ -283,7 +295,7 @@ impl ExpressionVisitor for Interpreter {
 }
 
 impl StmtVisitor for Interpreter {
-    type Item = Result<(), RuntimeException>;
+    type Item = Result<(), VMException>;
 
     fn visit_empty_stmt(&mut self) -> Self::Item {
         Ok(())
@@ -343,8 +355,8 @@ impl StmtVisitor for Interpreter {
 
             if let Err(e) = &result {
                 match e {
-                    RuntimeException::BreakException => break,
-                    RuntimeException::ContinueException => continue,
+                    VMException::BreakException => break,
+                    VMException::ContinueException => continue,
                     _ => result?,
                 }
             }
@@ -354,15 +366,15 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_break_stmt(&mut self, _: &Token) -> Self::Item {
-        Err(RuntimeException::BreakException)
+        Err(VMException::BreakException)
     }
 
     fn visit_continue_stmt(&mut self, _: &Token) -> Self::Item {
-        Err(RuntimeException::ContinueException)
+        Err(VMException::ContinueException)
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Self::Item {
-        let function = Function::new(stmt.clone(), Rc::clone(&self.environment), false);
+        let function = Function::new(Rc::new(stmt.clone()), Rc::clone(&self.environment), false);
 
         self.environment
             .borrow_mut()
@@ -378,7 +390,7 @@ impl StmtVisitor for Interpreter {
             Object::Undefined
         };
 
-        Err(RuntimeException::ReturnException(value))
+        Err(VMException::ReturnException(value))
     }
 
     fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Item {
@@ -389,29 +401,43 @@ impl StmtVisitor for Interpreter {
         let mut methods = HashMap::new();
 
         for method in &stmt.methods {
-            match method {
-                Stmt::FunctionStmt(function_stmt) => {
-                    let function = Function::new(
-                        *function_stmt.clone(),
-                        Rc::clone(&self.environment),
-                        function_stmt.name.lexeme.eq("init"),
-                    );
+            if let Stmt::FunctionStmt(function_stmt) = method {
+                let function = Function::new(
+                    Rc::new(*function_stmt.clone()),
+                    Rc::clone(&self.environment),
+                    function_stmt.name.lexeme.eq("init"),
+                );
 
-                    methods.insert(
-                        String::clone(&function_stmt.name.lexeme),
-                        Object::Callable(Rc::new(function)),
-                    );
-                }
-                _ => unreachable!(),
-            };
+                methods.insert(
+                    String::clone(&function_stmt.name.lexeme),
+                    Object::Callable(Rc::new(function)),
+                );
+            }
         }
 
-        let class = Class::new(&stmt.name.lexeme, methods);
+        let mut statics = HashMap::new();
+
+        for method in &stmt.statics {
+            if let Stmt::FunctionStmt(function_stmt) = method {
+                let function = Function::new(
+                    Rc::new(*function_stmt.clone()),
+                    Rc::clone(&self.environment),
+                    false,
+                );
+
+                statics.insert(
+                    String::clone(&function_stmt.name.lexeme),
+                    Object::Callable(Rc::new(function)),
+                );
+            }
+        }
+
+        let class = Class::new(&stmt.name.lexeme, methods, statics);
 
         self.environment
             .borrow_mut()
-            .assign(&stmt.name, Object::Callable(Rc::new(class)))
-            .map_err(|e| RuntimeException::RuntimeError(e))?;
+            .assign(&stmt.name, Object::StaticClass(Rc::new(class)))
+            .unwrap();
 
         Ok(())
     }
