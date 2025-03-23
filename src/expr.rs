@@ -25,8 +25,8 @@ use crate::{object::Object, token::Token};
 #[derive(Clone)]
 pub enum Expr {
     Comma(Box<Comma>),
-    Assignment(Box<Assignment>),
     Lambda(Box<Lambda>),
+    Assignment(Box<Assignment>),
     Set(Box<Set>),
     Ternary(Box<Ternary>),
     Logical(Box<Logical>),
@@ -44,8 +44,8 @@ pub trait ExprVisitor {
     type Item;
 
     fn visit_comma(&mut self, expr: &Comma) -> Self::Item;
-    fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item;
     fn visit_lambda(&mut self, expr: &Lambda) -> Self::Item;
+    fn visit_assignment(&mut self, expr: &Assignment) -> Self::Item;
     fn visit_set(&mut self, expr: &Set) -> Self::Item;
     fn visit_ternary(&mut self, expr: &Ternary) -> Self::Item;
     fn visit_logical(&mut self, expr: &Logical) -> Self::Item;
@@ -63,8 +63,8 @@ impl Expr {
     pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Item {
         match self {
             Expr::Comma(expr) => visitor.visit_comma(expr),
-            Expr::Assignment(expr) => visitor.visit_assignment(expr),
             Expr::Lambda(expr) => visitor.visit_lambda(expr),
+            Expr::Assignment(expr) => visitor.visit_assignment(expr),
             Expr::Set(expr) => visitor.visit_set(expr),
             Expr::Ternary(expr) => visitor.visit_ternary(expr),
             Expr::Logical(expr) => visitor.visit_logical(expr),

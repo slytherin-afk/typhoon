@@ -153,6 +153,11 @@ impl<'a> ExprVisitor for Resolver<'a> {
         self.resolve_local(&expr.name);
     }
 
+    fn visit_set(&mut self, expr: &expr::Set) -> Self::Item {
+        self.resolve_expression(&expr.value);
+        self.resolve_expression(&expr.object);
+    }
+
     fn visit_ternary(&mut self, expr: &expr::Ternary) -> Self::Item {
         self.resolve_expression(&expr.condition);
         self.resolve_expression(&expr.truth);
@@ -162,11 +167,6 @@ impl<'a> ExprVisitor for Resolver<'a> {
     fn visit_logical(&mut self, expr: &expr::Logical) -> Self::Item {
         self.resolve_expression(&expr.left);
         self.resolve_expression(&expr.right);
-    }
-
-    fn visit_set(&mut self, expr: &expr::Set) -> Self::Item {
-        self.resolve_expression(&expr.value);
-        self.resolve_expression(&expr.object);
     }
 
     fn visit_binary(&mut self, expr: &expr::Binary) -> Self::Item {

@@ -123,6 +123,31 @@ impl ExprVisitor for Interpreter {
         Ok(value)
     }
 
+    fn visit_set(&mut self, expr: &expr::Set) -> Self::Item {
+        let object = self.evaluate(&expr.object)?;
+
+        fn set_field<T: Instance + ?Sized>(
+            instance: Rc<T>,
+            expr: &expr::Set,
+            interpreter: &mut Interpreter,
+        ) -> Result<Object, RuntimeError> {
+            let value = interpreter.evaluate(&expr.value)?;
+
+            instance.set(&expr.name, value.clone())?;
+
+            Ok(value)
+        }
+
+        match object {
+            Object::Instance(class_instance) => set_field(class_instance, expr, self),
+            Object::CallableInstance(class_instance) => set_field(class_instance, expr, self),
+            _ => Err(RuntimeError {
+                token: expr.name.clone(),
+                message: "Only class instances have fields".to_string(),
+            }),
+        }
+    }
+
     fn visit_ternary(&mut self, expr: &expr::Ternary) -> Self::Item {
         let condition = self.evaluate(&expr.condition)?;
 
@@ -155,31 +180,6 @@ impl ExprVisitor for Interpreter {
         };
 
         Ok(value)
-    }
-
-    fn visit_set(&mut self, expr: &expr::Set) -> Self::Item {
-        let object = self.evaluate(&expr.object)?;
-
-        fn set_field<T: Instance + ?Sized>(
-            instance: Rc<T>,
-            expr: &expr::Set,
-            interpreter: &mut Interpreter,
-        ) -> Result<Object, RuntimeError> {
-            let value = interpreter.evaluate(&expr.value)?;
-
-            instance.set(&expr.name, value.clone())?;
-
-            Ok(value)
-        }
-
-        match object {
-            Object::Instance(class_instance) => set_field(class_instance, expr, self),
-            Object::CallableInstance(class_instance) => set_field(class_instance, expr, self),
-            _ => Err(RuntimeError {
-                token: expr.name.clone(),
-                message: "Only class instances have fields".to_string(),
-            }),
-        }
     }
 
     fn visit_binary(&mut self, expr: &expr::Binary) -> Self::Item {
