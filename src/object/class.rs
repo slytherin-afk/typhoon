@@ -1,10 +1,10 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{instance::ClassInstance, Callable, Instance, Object};
+use super::{
+    callable_instance::CallableInstance, class_instance::ClassInstance, Callable, Instance, Object,
+};
 
-use crate::{errors::RuntimeError, Interpreter, Token};
-
-pub trait StaticClass: Callable + Instance {}
+use crate::{errors::RuntimeError, interpreter::Interpreter, token::Token};
 
 pub struct ClassInternal {
     pub name: String,
@@ -68,6 +68,10 @@ impl Callable for Class {
     fn to_string(&self) -> String {
         format!("[Class: ({})]", self.internal.name)
     }
+
+    fn bind(&self, _: Object) -> Object {
+        unreachable!()
+    }
 }
 
 impl Instance for Class {
@@ -76,10 +80,10 @@ impl Instance for Class {
             return Ok(field.clone());
         }
 
-        Err(RuntimeError::new(
-            name.clone(),
-            format!("Undefined property '{}'", name.lexeme),
-        ))
+        Err(RuntimeError {
+            token: name.clone(),
+            message: format!("Undefined property '{}'", name.lexeme),
+        })
     }
 
     fn set(&self, name: &Token, value: Object) -> Result<(), RuntimeError> {
@@ -96,4 +100,4 @@ impl Instance for Class {
     }
 }
 
-impl StaticClass for Class {}
+impl CallableInstance for Class {}

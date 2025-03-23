@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{errors::RuntimeError, Object, Token};
+use crate::{errors::RuntimeError, object::Object, token::Token};
 
 pub struct Environment {
     values: HashMap<String, Object>,
@@ -21,10 +21,10 @@ impl Environment {
         } else if let Some(env) = &self.enclosing {
             env.borrow().get(name)
         } else {
-            Err(RuntimeError::new(
-                name.clone(),
-                format!("Undefined variable '{}'", name.lexeme),
-            ))
+            Err(RuntimeError {
+                token: name.clone(),
+                message: format!("Undefined variable '{}'", name.lexeme),
+            })
         }
     }
 
@@ -48,10 +48,10 @@ impl Environment {
         } else if let Some(env) = &mut self.enclosing {
             env.borrow_mut().assign(name, value)
         } else {
-            Err(RuntimeError::new(
-                name.clone(),
-                format!("Undefined variable '{}'", name.lexeme),
-            ))
+            Err(RuntimeError {
+                token: name.clone(),
+                message: format!("Undefined variable '{}'", name.lexeme),
+            })
         }
     }
 

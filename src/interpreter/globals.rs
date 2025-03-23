@@ -1,6 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{errors::RuntimeError, Callable, Interpreter, Object};
+use crate::{
+    errors::RuntimeError,
+    object::{Callable, Object},
+};
+
+use super::Interpreter;
 
 pub struct Clock;
 
@@ -17,5 +22,13 @@ impl Callable for Clock {
             .as_millis() as f64;
 
         Ok(Object::Number(millis))
+    }
+
+    fn to_string(&self) -> String {
+        String::from("Native Function: (clock)")
+    }
+
+    fn bind(&self, _: Object) -> Object {
+        unreachable!()
     }
 }

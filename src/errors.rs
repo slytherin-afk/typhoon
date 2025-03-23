@@ -1,7 +1,7 @@
-use crate::{Object, Token};
+use crate::{object::Object, token::Token};
 
 #[derive(Debug)]
-pub struct ParseError;
+pub struct SyntaxError;
 
 pub enum VMException {
     RuntimeError(RuntimeError),
@@ -10,26 +10,12 @@ pub enum VMException {
     ContinueException,
 }
 
+#[derive(Debug)]
+pub struct RuntimeError {
+    pub token: Token,
+    pub message: String,
+}
+
 pub struct BreakException;
 
 pub struct ContinueException;
-
-#[derive(Debug)]
-pub struct RuntimeError {
-    token: Token,
-    message: String,
-}
-
-impl RuntimeError {
-    pub fn new(token: Token, message: String) -> Self {
-        Self { token, message }
-    }
-
-    pub fn token(&self) -> &Token {
-        &self.token
-    }
-
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-}

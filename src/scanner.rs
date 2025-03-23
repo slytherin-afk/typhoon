@@ -1,7 +1,7 @@
 use phf::phf_map;
 use uuid::Uuid;
 
-use crate::{Lib, LiteralType, Token, TokenType};
+use crate::{literal_type::LiteralType, token::Token, token_type::TokenType, Lib};
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "and" => TokenType::And,
@@ -122,7 +122,7 @@ impl Scanner {
             self.identifier();
         } else if c == ' ' || c == '\r' || c == '\t' {
         } else {
-            Lib::error_one(self.line, "Unexpected character");
+            Lib::error_message(self.line, "Unexpected character");
         }
     }
 
@@ -151,7 +151,7 @@ impl Scanner {
                     self.advance();
                 }
 
-                Lib::error_one(self.line, "Expect a '*/'");
+                Lib::error_message(self.line, "Expect a '*/'");
             }
             _ => {
                 self.add_token(TokenType::Slash);
@@ -184,7 +184,7 @@ impl Scanner {
             }
         }
 
-        Lib::error_one(self.line, "Unterminated string literal");
+        Lib::error_message(self.line, "Unterminated string literal");
     }
 
     fn number_literal(&mut self) {

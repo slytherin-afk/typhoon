@@ -1,4 +1,4 @@
-use crate::{errors::RuntimeError, Interpreter};
+use crate::{errors::RuntimeError, interpreter::Interpreter};
 
 use super::Object;
 
@@ -11,11 +11,7 @@ pub trait Callable {
         arguments: Vec<Object>,
     ) -> Result<Object, RuntimeError>;
 
-    fn to_string(&self) -> String {
-        "[Native Function]".to_string()
-    }
+    fn to_string(&self) -> String;
 
-    fn bind(&self, _: Object) -> Object {
-        unreachable!()
-    }
+    fn bind(&self, _: Object) -> Object;
 }

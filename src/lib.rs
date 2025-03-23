@@ -1,31 +1,27 @@
+pub mod environment;
 pub mod errors;
-pub mod expression;
-pub mod globals;
-pub mod operations;
+pub mod expr;
+pub mod interpreter;
+pub mod literal_type;
+pub mod object;
 pub mod stmt;
+pub mod token;
+pub mod token_type;
+pub mod utils;
 
-mod environment;
-mod interpreter;
-mod object;
 mod parser;
 mod resolver;
 mod scanner;
-mod token;
-mod token_type;
 
 use colored::Colorize;
-use rustyline::DefaultEditor;
-
 use errors::RuntimeError;
+use interpreter::Interpreter;
 use parser::Parser;
 use resolver::Resolver;
+use rustyline::DefaultEditor;
 use scanner::Scanner;
-
-pub use environment::Environment;
-pub use interpreter::Interpreter;
-pub use object::{Callable, Class, ClassInstance, Function, Instance, Object, ResolvableFunction};
-pub use token::{LiteralType, Token};
-pub use token_type::TokenType;
+use token::Token;
+use token_type::TokenType;
 
 pub struct Lib {
     interpreter: Interpreter,
@@ -89,11 +85,11 @@ impl Lib {
         self.interpreter.interpret(&statements);
     }
 
-    pub fn error_one(line: usize, message: &str) {
+    pub fn error_message(line: usize, message: &str) {
         Lib::report(line, "", message);
     }
 
-    pub fn error_two(token: &Token, message: &str) {
+    pub fn error_token(token: &Token, message: &str) {
         if token.token_type == TokenType::Eof {
             Lib::report(token.line, "at end", message);
         } else {
@@ -105,8 +101,8 @@ impl Lib {
     pub fn runtime_error(runtime_error: &RuntimeError) {
         println!(
             "[{}] {}",
-            runtime_error.token().line.to_string().bold().blue(),
-            runtime_error.message().bright_red()
+            runtime_error.token.line.to_string().bold().blue(),
+            runtime_error.message.bright_red()
         );
 
         unsafe {
@@ -128,7 +124,7 @@ impl Lib {
         }
     }
 
-    pub fn warn_two(token: &Token, message: &str) {
+    pub fn warn_token(token: &Token, message: &str) {
         if token.token_type == TokenType::Eof {
             Lib::report_warning(token.line, "at end", message);
         } else {

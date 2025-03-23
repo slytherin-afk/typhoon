@@ -1,10 +1,4 @@
-use crate::token_type::TokenType;
-
-#[derive(Clone, Debug)]
-pub enum LiteralType {
-    String(String),
-    Number(f64),
-}
+use crate::{literal_type::LiteralType, token_type::TokenType};
 
 #[derive(Clone, Debug)]
 pub struct Token {

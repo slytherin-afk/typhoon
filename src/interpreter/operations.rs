@@ -1,4 +1,4 @@
-use crate::{errors::RuntimeError, Object, Token};
+use crate::{errors::RuntimeError, object::Object, token::Token, utils::bool_to_number};
 
 pub fn handle_addition(
     left: &Object,
@@ -15,10 +15,10 @@ pub fn handle_addition(
         (Object::Boolean(l), Object::Boolean(r)) => {
             Object::Number(bool_to_number(*l) + bool_to_number(*r))
         }
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be (numbers or booleans) or two strings".to_string(),
-        ))?,
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be (numbers or booleans) or two strings"),
+        })?,
     };
 
     Ok(value)
@@ -36,10 +36,10 @@ pub fn handle_subtraction(
         (Object::Boolean(l), Object::Boolean(r)) => {
             Object::Number(bool_to_number(*l) - bool_to_number(*r))
         }
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers or booleans".to_string(),
-        ))?,
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers or booleans"),
+        })?,
     };
 
     Ok(value)
@@ -57,10 +57,10 @@ pub fn handle_multiplication(
         (Object::Boolean(l), Object::Boolean(r)) => {
             Object::Number(bool_to_number(*l) * bool_to_number(*r))
         }
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers or booleans".to_string(),
-        ))?,
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers or booleans"),
+        })?,
     };
 
     Ok(value)
@@ -73,10 +73,10 @@ pub fn handle_division(
 ) -> Result<Object, RuntimeError> {
     let divide = |l, r| {
         if r == 0.0 {
-            Err(RuntimeError::new(
-                operator.clone(),
-                "Divide by zero".to_string(),
-            ))
+            Err(RuntimeError {
+                token: operator.clone(),
+                message: String::from("Divide by zero"),
+            })
         } else {
             Ok(l / r)
         }
@@ -89,10 +89,10 @@ pub fn handle_division(
         (Object::Boolean(l), Object::Boolean(r)) => {
             Object::Number(divide(bool_to_number(*l), bool_to_number(*r))?)
         }
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers or booleans".to_string(),
-        ))?,
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers or booleans"),
+        })?,
     };
 
     Ok(value)
@@ -111,10 +111,10 @@ pub fn handle_less_than(
             Ok(Object::Boolean(bool_to_number(*l) < bool_to_number(*r)))
         }
         (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l < r)),
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers, booleans, or strings".to_string(),
-        )),
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers, booleans, or strings"),
+        }),
     }
 }
 
@@ -131,10 +131,10 @@ pub fn handle_greater_than(
             Ok(Object::Boolean(bool_to_number(*l) > bool_to_number(*r)))
         }
         (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l > r)),
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers, booleans, or strings".to_string(),
-        )),
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers, booleans, or strings"),
+        }),
     }
 }
 
@@ -151,10 +151,10 @@ pub fn handle_less_than_equal(
             Ok(Object::Boolean(bool_to_number(*l) <= bool_to_number(*r)))
         }
         (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l <= r)),
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers, booleans, or strings".to_string(),
-        )),
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers, booleans, or strings"),
+        }),
     }
 }
 
@@ -171,27 +171,9 @@ pub fn handle_greater_than_equal(
             Ok(Object::Boolean(bool_to_number(*l) >= bool_to_number(*r)))
         }
         (Object::String(l), Object::String(r)) => Ok(Object::Boolean(l >= r)),
-        _ => Err(RuntimeError::new(
-            operator.clone(),
-            "Operands must be numbers, booleans, or strings".to_string(),
-        )),
-    }
-}
-
-pub fn bool_to_number(boolean: bool) -> f64 {
-    if boolean {
-        1.0
-    } else {
-        0.0
-    }
-}
-
-pub fn is_truthy(literal: &Object) -> bool {
-    match literal {
-        Object::Undefined => false,
-        Object::Number(number) => *number != 0.0,
-        Object::String(string) => !string.is_empty(),
-        Object::Boolean(boolean) => *boolean,
-        _ => true,
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers, booleans, or strings"),
+        }),
     }
 }

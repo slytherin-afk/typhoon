@@ -1,18 +1,12 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
+    environment::Environment,
     errors::{RuntimeError, VMException},
-    stmt::Stmt,
-    Environment, Interpreter, Token,
+    interpreter::Interpreter,
 };
 
-use super::{Callable, Object};
-
-pub trait ResolvableFunction: 'static {
-    fn params(&self) -> &Vec<Token>;
-    fn body(&self) -> &Vec<Stmt>;
-    fn name(&self) -> &str;
-}
+use super::{Callable, Object, ResolvableFunction};
 
 pub struct Function<T: ResolvableFunction> {
     declaration: Rc<T>,
@@ -27,7 +21,7 @@ impl<T: ResolvableFunction> Function<T> {
         is_initializer: bool,
     ) -> Self {
         Self {
-            declaration: declaration,
+            declaration,
             closure,
             is_initializer,
         }
