@@ -536,7 +536,7 @@ impl Parser {
     fn factor(&mut self) -> Result<Expr, SyntaxError> {
         let mut left = self.unary()?;
 
-        while self.matches(&[TokenType::Star, TokenType::Slash]) {
+        while self.matches(&[TokenType::Star, TokenType::Slash, TokenType::Percentage]) {
             let operator = self.previous().clone();
             let right = self.unary()?;
             left = Expr::Binary(Box::new(expr::Binary {

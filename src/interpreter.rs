@@ -191,6 +191,7 @@ impl ExprVisitor for Interpreter {
             TokenType::Minus => operations::handle_subtraction(&left, &right, &expr.operator),
             TokenType::Star => operations::handle_multiplication(&left, &right, &expr.operator),
             TokenType::Slash => operations::handle_division(&left, &right, &expr.operator),
+            TokenType::Percentage => operations::handle_modulus(&left, &right, &expr.operator),
             TokenType::Greater => operations::handle_greater_than(&left, &right, &expr.operator),
             TokenType::GreaterEqual => {
                 operations::handle_greater_than_equal(&left, &right, &expr.operator)

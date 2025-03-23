@@ -82,6 +82,8 @@ impl Scanner {
             self.add_token(TokenType::Question);
         } else if c == ':' {
             self.add_token(TokenType::Colon);
+        } else if c == '%' {
+            self.add_token(TokenType::Percentage);
         } else if c == '!' {
             let token_type = if self.matches('=') {
                 TokenType::BangEqual

@@ -98,6 +98,27 @@ pub fn handle_division(
     Ok(value)
 }
 
+pub fn handle_modulus(
+    left: &Object,
+    right: &Object,
+    operator: &Token,
+) -> Result<Object, RuntimeError> {
+    let value = match (left, right) {
+        (Object::Number(l), Object::Number(r)) => Object::Number(l % r),
+        (Object::Number(l), Object::Boolean(r)) => Object::Number(l % bool_to_number(*r)),
+        (Object::Boolean(l), Object::Number(r)) => Object::Number(bool_to_number(*l) % r),
+        (Object::Boolean(l), Object::Boolean(r)) => {
+            Object::Number(bool_to_number(*l) % bool_to_number(*r))
+        }
+        _ => Err(RuntimeError {
+            token: operator.clone(),
+            message: String::from("Operands must be numbers or booleans"),
+        })?,
+    };
+
+    Ok(value)
+}
+
 pub fn handle_less_than(
     left: &Object,
     right: &Object,

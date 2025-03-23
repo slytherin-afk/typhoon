@@ -8,6 +8,7 @@ pub enum TokenType {
     Dot,
     Minus,
     Plus,
+    Percentage,
     SemiColon,
     Question,
     Colon,
