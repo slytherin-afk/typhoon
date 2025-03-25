@@ -21,6 +21,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    SubClass,
 }
 
 pub struct Resolver<'a> {
@@ -216,6 +217,25 @@ impl<'a> ExprVisitor for Resolver<'a> {
         self.resolve_local(expr);
     }
 
+    fn visit_super(&mut self, expr: &expr::Super) -> Self::Item {
+        if matches!(self.class_type, ClassType::None) {
+            Lib::error_token(&expr.keyword, "Can't use 'super' outside a class method");
+        }
+
+        if matches!(self.class_type, ClassType::Class) {
+            Lib::error_token(
+                &expr.keyword,
+                "Can't use 'super' inside a class with no super class",
+            );
+        }
+
+        if matches!(self.function_type, FunctionType::Static) {
+            Lib::error_token(&expr.keyword, "Can't use 'super' inside a static method");
+        }
+
+        self.resolve_local(&expr.keyword);
+    }
+
     fn visit_literal(&mut self, _: &Object) -> Self::Item {}
 }
 
@@ -308,16 +328,31 @@ impl<'a> StmtVisitor for Resolver<'a> {
 
         self.declare(&stmt.name);
         self.define(&stmt.name);
+
+        if let Some(super_class) = &stmt.super_class {
+            self.class_type = ClassType::SubClass;
+            self.resolve_expression(super_class);
+
+            self.begin_scope();
+
+            self.scopes
+                .last_mut()
+                .unwrap()
+                .insert(String::from("super"), true);
+
+            if let Expr::Variable(super_class) = super_class {
+                if super_class.lexeme == stmt.name.lexeme {
+                    Lib::error_token(&super_class, "A class can't inherit from itself");
+                }
+            }
+        }
+
         self.begin_scope();
 
         for method in &stmt.statics {
-            let mut declaration = FunctionType::Static;
+            let declaration = FunctionType::Static;
 
             if let Stmt::Function(function_stmt) = method {
-                if function_stmt.name.lexeme.eq("init") {
-                    declaration = FunctionType::Initializer;
-                }
-
                 self.resolve_function(&**function_stmt, declaration);
             }
         }
@@ -340,6 +375,10 @@ impl<'a> StmtVisitor for Resolver<'a> {
         }
 
         self.end_scope();
+
+        if let Some(_) = &stmt.super_class {
+            self.end_scope();
+        }
 
         self.class_type = enclosing;
     }

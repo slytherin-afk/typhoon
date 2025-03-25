@@ -293,6 +293,33 @@ impl ExprVisitor for Interpreter {
         self.look_up_variable(expr)
     }
 
+    fn visit_super(&mut self, expr: &expr::Super) -> Self::Item {
+        let distance = self
+            .locals
+            .get(expr.keyword.identifier_hash.as_ref().unwrap())
+            .unwrap();
+        let super_class = self.environment.borrow().get_at(*distance, "super")?;
+        let object = self.environment.borrow().get_at(distance - 1, "this")?;
+
+        if let Object::CallableInstance(super_class) = super_class {
+            if let Some(class) = super_class.as_any().downcast_ref::<Class>() {
+                match class.find_method(&expr.method.lexeme) {
+                    Some(method) => {
+                        if let Object::Callable(method) = method {
+                            return Ok(method.bind(object));
+                        }
+                    }
+                    None => Err(RuntimeError {
+                        token: expr.method.clone(),
+                        message: format!("Undefined property '{}'", expr.method.lexeme),
+                    })?,
+                }
+            }
+        };
+
+        unreachable!();
+    }
+
     fn visit_literal(&mut self, expr: &Object) -> Self::Item {
         Ok(expr.clone())
     }
@@ -398,25 +425,33 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Item {
+        let super_class = if let Some(Expr::Variable(super_class)) = &stmt.super_class {
+            let super_class_object =
+                self.evaluate_and_map_error(stmt.super_class.as_ref().unwrap())?;
+
+            match super_class_object {
+                Object::CallableInstance(callable_instance) => Some(callable_instance),
+                _ => Err(VMException::RuntimeError(RuntimeError {
+                    token: *super_class.clone(),
+                    message: String::from("Superclass must be a class"),
+                }))?,
+            }
+        } else {
+            None
+        };
+
         self.environment
             .borrow_mut()
             .define(&stmt.name.lexeme, Object::Undefined);
 
-        let mut methods = HashMap::new();
+        if let Some(super_class) = &super_class {
+            self.environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
+                &self.environment,
+            )))));
 
-        for method in &stmt.methods {
-            if let Stmt::Function(function_stmt) = method {
-                let function = Function::new(
-                    Rc::new(*function_stmt.clone()),
-                    Rc::clone(&self.environment),
-                    function_stmt.name.lexeme.eq("init"),
-                );
-
-                methods.insert(
-                    String::clone(&function_stmt.name.lexeme),
-                    Object::Callable(Rc::new(function)),
-                );
-            }
+            self.environment
+                .borrow_mut()
+                .define("super", Object::CallableInstance(Rc::clone(super_class)));
         }
 
         let mut statics = HashMap::new();
@@ -436,7 +471,29 @@ impl StmtVisitor for Interpreter {
             }
         }
 
-        let class = Class::new(&stmt.name.lexeme, methods, statics);
+        let mut methods = HashMap::new();
+
+        for method in &stmt.methods {
+            if let Stmt::Function(function_stmt) = method {
+                let function = Function::new(
+                    Rc::new(*function_stmt.clone()),
+                    Rc::clone(&self.environment),
+                    function_stmt.name.lexeme.eq("init"),
+                );
+
+                methods.insert(
+                    String::clone(&function_stmt.name.lexeme),
+                    Object::Callable(Rc::new(function)),
+                );
+            }
+        }
+
+        let class = Class::new(&stmt.name.lexeme, super_class, statics, methods);
+
+        if let Some(_) = &stmt.super_class {
+            let previous = Rc::clone(self.environment.borrow().enclosing.as_ref().unwrap());
+            self.environment = previous;
+        }
 
         self.environment
             .borrow_mut()

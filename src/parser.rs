@@ -1,6 +1,6 @@
 use crate::{
     errors::SyntaxError,
-    expr::{self, Expr},
+    expr::{self, Expr, Super},
     literal_type::LiteralType,
     object::Object,
     stmt::{self, Stmt},
@@ -306,6 +306,15 @@ impl Parser {
             .consume(&TokenType::Identifier, "Expected an identifier after class")?
             .clone();
 
+        let super_class = if self.matches(&[TokenType::Less]) {
+            Some(Expr::Variable(Box::new(
+                self.consume(&TokenType::Identifier, "Expected a super class name")?
+                    .clone(),
+            )))
+        } else {
+            None
+        };
+
         self.consume(&TokenType::LeftBraces, "Expected '{' after class body")?;
 
         let mut methods = vec![];
@@ -326,6 +335,7 @@ impl Parser {
 
         Ok(Stmt::Class(Box::new(stmt::Class {
             name,
+            super_class,
             methods,
             statics,
         })))
@@ -611,6 +621,46 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, SyntaxError> {
+        if self.matches(&[TokenType::LeftParenthesis]) {
+            let expression = self.expression()?;
+
+            self.consume(&TokenType::RightParenthesis, "Expect a ')'")?;
+
+            return Ok(Expr::Grouping(Box::new(expression)));
+        }
+
+        if self.matches(&[TokenType::This]) {
+            return Ok(Expr::This(Box::new(self.previous().clone())));
+        }
+
+        if self.matches(&[TokenType::Super]) {
+            let keyword = self.previous().clone();
+
+            self.consume(&TokenType::Dot, "Expect a '.' after 'super'")?;
+
+            let method = self
+                .consume(&TokenType::Identifier, "Expect an super class method name")?
+                .clone();
+
+            return Ok(Expr::Super(Box::new(Super { keyword, method })));
+        }
+
+        if self.matches(&[TokenType::Identifier]) {
+            return Ok(Expr::Variable(Box::new(self.previous().clone())));
+        }
+
+        if self.matches(&[TokenType::Undefined]) {
+            return Ok(Expr::Literal(Box::new(Object::Undefined)));
+        }
+
+        if self.matches(&[TokenType::False]) {
+            return Ok(Expr::Literal(Box::new(Object::Boolean(false))));
+        }
+
+        if self.matches(&[TokenType::True]) {
+            return Ok(Expr::Literal(Box::new(Object::Boolean(true))));
+        }
+
         if self.matches(&[TokenType::NumberLiteral]) {
             let number = self.previous().literal.as_ref().unwrap();
 
@@ -625,34 +675,6 @@ impl Parser {
             if let LiteralType::String(value) = string {
                 return Ok(Expr::Literal(Box::new(Object::String(String::from(value)))));
             }
-        }
-
-        if self.matches(&[TokenType::False]) {
-            return Ok(Expr::Literal(Box::new(Object::Boolean(false))));
-        }
-
-        if self.matches(&[TokenType::True]) {
-            return Ok(Expr::Literal(Box::new(Object::Boolean(true))));
-        }
-
-        if self.matches(&[TokenType::Undefined]) {
-            return Ok(Expr::Literal(Box::new(Object::Undefined)));
-        }
-
-        if self.matches(&[TokenType::This]) {
-            return Ok(Expr::This(Box::new(self.previous().clone())));
-        }
-
-        if self.matches(&[TokenType::Identifier]) {
-            return Ok(Expr::Variable(Box::new(self.previous().clone())));
-        }
-
-        if self.matches(&[TokenType::LeftParenthesis]) {
-            let expression = self.expression()?;
-
-            self.consume(&TokenType::RightParenthesis, "Expect a ')'")?;
-
-            return Ok(Expr::Grouping(Box::new(expression)));
         }
 
         if self.matches(&[

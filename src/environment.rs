@@ -4,7 +4,7 @@ use crate::{errors::RuntimeError, object::Object, token::Token};
 
 pub struct Environment {
     values: HashMap<String, Object>,
-    enclosing: Option<Rc<RefCell<Environment>>>,
+    pub enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {

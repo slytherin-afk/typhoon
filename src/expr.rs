@@ -1,3 +1,4 @@
+mod _super;
 mod assignment;
 mod binary;
 mod call;
@@ -9,6 +10,7 @@ mod set;
 mod ternary;
 mod unary;
 
+pub use _super::Super;
 pub use assignment::Assignment;
 pub use binary::Binary;
 pub use call::Call;
@@ -37,6 +39,7 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Variable(Box<Token>),
     This(Box<Token>),
+    Super(Box<Super>),
     Literal(Box<Object>),
 }
 
@@ -56,6 +59,7 @@ pub trait ExprVisitor {
     fn visit_grouping(&mut self, expr: &Expr) -> Self::Item;
     fn visit_variable(&mut self, expr: &Token) -> Self::Item;
     fn visit_this(&mut self, expr: &Token) -> Self::Item;
+    fn visit_super(&mut self, expr: &Super) -> Self::Item;
     fn visit_literal(&mut self, expr: &Object) -> Self::Item;
 }
 
@@ -75,6 +79,7 @@ impl Expr {
             Expr::Grouping(expr) => visitor.visit_grouping(expr),
             Expr::Variable(expr) => visitor.visit_variable(expr),
             Expr::This(expr) => visitor.visit_this(expr),
+            Expr::Super(expr) => visitor.visit_super(expr),
             Expr::Literal(expr) => visitor.visit_literal(expr),
         }
     }

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
     callable_instance::CallableInstance, class_instance::ClassInstance, Callable, Instance, Object,
@@ -8,6 +8,7 @@ use crate::{errors::RuntimeError, interpreter::Interpreter, token::Token};
 
 pub struct ClassInternal {
     pub name: String,
+    super_class: Option<Rc<dyn CallableInstance>>,
     methods: HashMap<String, Object>,
     statics: RefCell<HashMap<String, Object>>,
 }
@@ -20,12 +21,14 @@ pub struct Class {
 impl Class {
     pub fn new(
         name: &str,
-        methods: HashMap<String, Object>,
+        super_class: Option<Rc<dyn CallableInstance>>,
         statics: HashMap<String, Object>,
+        methods: HashMap<String, Object>,
     ) -> Self {
         Self {
             internal: Rc::new(ClassInternal {
                 name: String::from(name),
+                super_class,
                 methods,
                 statics: RefCell::new(statics),
             }),
@@ -33,7 +36,17 @@ impl Class {
     }
 
     pub fn find_method(&self, name: &str) -> Option<Object> {
-        Some(self.internal.methods.get(name)?.clone())
+        if let Some(method) = self.internal.methods.get(name) {
+            return Some(method.clone());
+        }
+
+        if let Some(super_class) = &self.internal.super_class {
+            if let Some(class) = super_class.as_any().downcast_ref::<Class>() {
+                return class.find_method(name);
+            }
+        }
+
+        None
     }
 }
 
@@ -100,4 +113,8 @@ impl Instance for Class {
     }
 }
 
-impl CallableInstance for Class {}
+impl CallableInstance for Class {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
